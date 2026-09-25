@@ -175,6 +175,29 @@ def cmd_match(args: argparse.Namespace) -> None:
     print(f"gate report -> {report.REPORT_DIR / 'gate_report.md'}")
 
 
+def cmd_decide(args: argparse.Namespace) -> None:
+    import polars as pl
+
+    from er.decide import pipeline, report
+
+    oof_path = io.ROOT / args.oof
+    oof = pl.read_parquet(oof_path)
+    truth = io.load_truth()
+    result = pipeline.run(oof, truth)
+    written = report.write(result)
+    print(json.dumps({k: written[k] for k in ("stages", "decision_winner", "exclusivity_winner")},
+                     indent=2, default=str))
+    print(f"gate report -> {report.REPORT_DIR / 'gate_report.md'}")
+
+
+def cmd_submit(args: argparse.Namespace) -> None:
+    from er import submit
+
+    stats = submit.run(args.config, args.k, args.match_subset, args.holdout_country)
+    print(json.dumps(stats, indent=2, default=str))
+    print(f"matching_results.tsv -> {io.ROOT / 'output' / 'matching_results.tsv'}")
+
+
 def cmd_learn(args: argparse.Namespace) -> None:
     from er.normalize.learned import mine
 
@@ -240,6 +263,18 @@ def main() -> None:
     sp.add_argument("--k", type=int, default=10, help="ranker budget per target source")
     sp.add_argument("--holdout-country", default="India", help="country left out for the France stand-in check")
     sp.set_defaults(fn=cmd_match)
+
+    sp = sub.add_parser("decide", help="Step 5: exclusivity + per-entity expected-F0.5 decision layer")
+    sp.add_argument("--oof", default="reports/match/oof.parquet", help="OOF parquet written by `er match`")
+    sp.set_defaults(fn=cmd_decide)
+
+    sp = sub.add_parser("submit", help="real test-set matching_results.tsv: Step 4 classifier + Step 5 decision")
+    sp.add_argument("config", help="blocking config (channels + ranker) to shortlist candidates with")
+    sp.add_argument("--k", type=int, default=10, help="ranker budget per target source")
+    sp.add_argument("--match-subset", default="dev", choices=["dev", "val", "train"],
+                    help="train-subset used to fit the classifier and decide the Step 5 policy")
+    sp.add_argument("--holdout-country", default="India", help="country left out for the France stand-in check")
+    sp.set_defaults(fn=cmd_submit)
 
     sp = sub.add_parser("learn", help="mine N4 alias tables from train-fold pairs")
     sp.add_argument("--name", default="n4_v1")
