@@ -40,28 +40,85 @@ def embed_source(split: str, src: str, batch: int = 1024, force: bool = False) -
     return emb
 
 
-def dense_channel(queries: pl.DataFrame, targets: dict[str, pl.DataFrame], k: int,
-                  query_rows: np.ndarray, split: str = "train", qbatch: int = 256) -> pl.DataFrame:
-    """query_rows: row positions of `queries` within the full S1 parquet (to index cached embeddings)."""
+_GPU: dict[tuple, object] = {}  # (split, src) → (resident fp16 targets, block slices)
+
+
+def _resident(split: str, src: str, tkey: np.ndarray | None):
+    """One split's target embeddings on the GPU (≈7.6 GB for S2+S3), rows sorted by partition key so every
+    block is a zero-copy slice. The other split is evicted first."""
     import torch
 
-    q_all = embed_source(split, "S1")
-    q = torch.from_numpy(np.ascontiguousarray(q_all[query_rows])).cuda()
-    out = []
-    for src, tdf in targets.items():
-        t = torch.from_numpy(np.array(embed_source(split, src))).cuda()
-        rows, cols, vals = [], [], []
-        for i in range(0, q.shape[0], qbatch):
-            sims = q[i:i + qbatch] @ t.T
-            v, idx = torch.topk(sims, k, dim=1)
-            rows.append(np.repeat(np.arange(i, i + v.shape[0]), k))
-            cols.append(idx.flatten().cpu().numpy())
-            vals.append(v.flatten().float().cpu().numpy())
-        del t
+    key = (split, src, tkey is not None)
+    if key not in _GPU:
+        for k in [k for k in _GPU if k[0] != split or k[1] == src]:
+            del _GPU[k]
         torch.cuda.empty_cache()
-        out.append(pl.DataFrame({
-            "s1_id": queries["entity_id"].gather(np.concatenate(rows)),
-            "target_id": tdf["entity_id"].gather(np.concatenate(cols)),
-            "score": np.concatenate(vals),
-        }))
-    return pl.concat(out)
+        emb = embed_source(split, src)
+        if tkey is None:
+            order, blocks = np.arange(len(emb)), {"*": (0, len(emb))}
+        else:
+            order = np.argsort(tkey, kind="stable")
+            keys, starts = np.unique(tkey[order], return_index=True)
+            ends = list(starts[1:]) + [len(order)]
+            blocks = {str(r): (int(a), int(b)) for r, a, b in zip(keys, starts, ends)}
+        _GPU[key] = (torch.from_numpy(np.asarray(emb[order])).cuda(), order, blocks)
+    return _GPU[key]
+
+
+def _topk(q, t, k: int, qbatch: int):
+    import torch
+
+    k = min(k, t.shape[0])
+    vals, idx = [], []
+    for i in range(0, q.shape[0], qbatch):
+        v, j = torch.topk(q[i:i + qbatch] @ t.T, k, dim=1)
+        vals.append(v.float())
+        idx.append(j)
+    return torch.cat(vals), torch.cat(idx)
+
+
+def dense_channel(queries: pl.DataFrame, targets: dict[str, pl.DataFrame], k: int,
+                  query_rows: np.ndarray, split: str = "train", partition: str | None = None,
+                  qbatch: int = 256) -> pl.DataFrame:
+    """query_rows: row positions of `queries` within the full S1 parquet (to index cached embeddings).
+
+    partition: keyed query r searches target blocks {r, unknown}; unkeyed queries search all targets.
+    """
+    import torch
+
+    order_q = np.argsort(query_rows, kind="stable")
+    q_all = torch.from_numpy(np.ascontiguousarray(embed_source(split, "S1")[query_rows[order_q]])).cuda()
+    qids = queries["entity_id"].gather(order_q)
+    qkey = queries[partition].fill_null("").to_numpy().astype(str)[order_q] if partition else None
+    out = []
+    with torch.inference_mode():
+        for src, tdf in targets.items():
+            tkey = tdf[partition].fill_null("").to_numpy().astype(str) if partition else None
+            t, t_order, blocks = _resident(split, src, tkey)
+            tids = tdf["entity_id"].gather(t_order)
+            groups = [(np.arange(len(qids)), [(0, t.shape[0])])] if qkey is None else []
+            if qkey is not None:
+                for r in np.unique(qkey):
+                    qi = np.flatnonzero(qkey == r)
+                    if r == "":
+                        spans = [(0, t.shape[0])]
+                    else:
+                        spans = [blocks[b] for b in (r, "") if b in blocks]
+                    groups.append((qi, spans))
+            for qi, spans in groups:
+                if not spans:
+                    continue
+                qt = q_all[torch.from_numpy(qi).cuda()]
+                for a, b in spans:
+                    v, j = _topk(qt, t[a:b], k, qbatch)
+                    out.append(pl.DataFrame({
+                        "s1_id": qids.gather(np.repeat(qi, v.shape[1])),
+                        "target_id": tids.gather((j + a).flatten().cpu().numpy()),
+                        "score": v.flatten().cpu().numpy(),
+                    }))
+    df = pl.concat(out)
+    if partition:
+        df = df.sort("score", descending=True).group_by("s1_id", "target_id", maintain_order=True).first()
+        df = df.sort("score", descending=True).group_by(
+            "s1_id", pl.col("target_id").str.slice(0, 2).alias("_src"), maintain_order=True).head(k).drop("_src")
+    return df

@@ -12,12 +12,25 @@ def _keys(df: pl.DataFrame, col: str, id_name: str) -> pl.DataFrame:
     return k.filter(pl.col("key").is_not_null() & (pl.col("key") != "")).unique()
 
 
-def exact_channel(queries: pl.DataFrame, targets: pl.DataFrame, query_col: str, target_col: str,
-                  max_block: int) -> tuple[pl.DataFrame, dict]:
-    qk = _keys(queries, query_col, "s1_id")
+_TARGET_CACHE: dict[tuple, tuple[pl.DataFrame, pl.DataFrame]] = {}
+
+
+def _target_side(targets: pl.DataFrame, target_col: str, max_block: int, cache_key: tuple | None):
+    if cache_key is not None and cache_key in _TARGET_CACHE:
+        return _TARGET_CACHE[cache_key]
     tk = _keys(targets, target_col, "target_id")
     sizes = tk.group_by("key").len("block")
-    tk = tk.join(sizes.filter(pl.col("block") <= max_block), on="key")
+    out = (tk.join(sizes.filter(pl.col("block") <= max_block), on="key"), sizes)
+    if cache_key is not None:
+        _TARGET_CACHE[cache_key] = out
+    return out
+
+
+def exact_channel(queries: pl.DataFrame, targets: pl.DataFrame, query_col: str, target_col: str,
+                  max_block: int, cache_key: tuple | None = None) -> tuple[pl.DataFrame, dict]:
+    """cache_key: identifies an unchanging target pool so its key table is built once per process."""
+    qk = _keys(queries, query_col, "s1_id")
+    tk, sizes = _target_side(targets, target_col, max_block, cache_key)
     pairs = qk.join(tk, on="key").select(
         "s1_id", "target_id", (1.0 / pl.col("block")).alias("score")
     ).group_by("s1_id", "target_id").agg(pl.col("score").max())
@@ -41,7 +54,7 @@ def house_token_keys(df: pl.DataFrame, df_table: pl.DataFrame, rarest: int | Non
     if rarest is not None:
         toks = (
             toks.join(df_table, on="tok", how="inner")
-            .sort("df")
+            .sort("df", "tok")
             .group_by("entity_id", maintain_order=True)
             .head(rarest)
         )

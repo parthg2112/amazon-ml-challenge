@@ -122,6 +122,9 @@ def cmd_block(args: argparse.Namespace) -> None:
     rows.append({"K": "union", **{x: m["union"][x] for x in rows[0] if x != "K"}})
     print(_transpose([{**r, "K": str(r["K"])} for r in rows]))
     if "ranked" in m:
+        pu = m["precut_union"]
+        print(f"precut union: recall {pu['pair_recall']:.4f} oracle {pu['oracle_ceiling_f05']:.4f} "
+              f"mean cand {pu['mean_candidates']:.1f}")
         print("ranker:")
         print(_transpose([{"K": k, **{x: b[x] for x in ("oracle_ceiling_f05", "pair_recall", "full_coverage",
                                                           "mean_candidates")}} for k, b in m["ranked"].items()]))

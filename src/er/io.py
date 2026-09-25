@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-os.environ.setdefault("POLARS_MAX_THREADS", str(os.cpu_count() or 12))
+# One core left free for the OS/UI; override with ER_THREADS. Set before polars/sklearn/torch import.
+THREADS = int(os.environ.get("ER_THREADS", "11"))
+for _var in ("POLARS_MAX_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+    os.environ.setdefault(_var, str(THREADS))
 
 import polars as pl
 

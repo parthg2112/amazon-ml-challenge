@@ -5,6 +5,7 @@ Queries are processed in chunks so validation (442k S1) and test (1.73M S1) stay
 
 from __future__ import annotations
 
+import gc
 import json
 import time
 import tomllib
@@ -23,7 +24,9 @@ from er.normalize.pipeline import NormConfig, load_norm
 from er.split import load_split, subset_ids
 
 EXPERIMENTS = io.REPORTS / "experiments"
-CHUNK = 50_000
+_HOUSE_DF: dict[tuple, pl.DataFrame] = {}  # target-side tables never change within a process
+_HOUSE_TK: dict[tuple, pl.DataFrame] = {}
+CHUNK = 25_000
 
 
 def _cardinality_bucket() -> pl.Expr:
@@ -40,16 +43,18 @@ def run_channel(ch: dict, queries: pl.DataFrame, targets: dict[str, pl.DataFrame
         parts = []
         for src, t in targets.items():
             p, stats[src] = exact_channel(queries, t, ch["query_col"], ch.get("target_col", ch["query_col"]),
-                                          ch.get("max_block", 200))
+                                          ch.get("max_block", 200), (split, variant, src, ch["id"]))
             parts.append(p)
         df = pl.concat(parts)
     elif kind == "house_token":
         parts = []
         for src, t in targets.items():
-            dft = token_df(t)
-            qk = house_token_keys(queries, dft, ch.get("rarest", 2)).rename({"house_tok": "k"})
-            tk = house_token_keys(t, dft, None).rename({"house_tok": "k"})
-            p, stats[src] = exact_channel(qk, tk, "k", "k", ch.get("max_block", 200))
+            ck = (split, variant, src, ch["id"])
+            if ck not in _HOUSE_DF:
+                _HOUSE_DF[ck] = token_df(t)
+                _HOUSE_TK[ck] = house_token_keys(t, _HOUSE_DF[ck], None).rename({"house_tok": "k"})
+            qk = house_token_keys(queries, _HOUSE_DF[ck], ch.get("rarest", 2)).rename({"house_tok": "k"})
+            p, stats[src] = exact_channel(qk, _HOUSE_TK[ck], "k", "k", ch.get("max_block", 200), ck)
             parts.append(p)
         df = pl.concat(parts)
     elif kind == "sparse":
@@ -62,7 +67,8 @@ def run_channel(ch: dict, queries: pl.DataFrame, targets: dict[str, pl.DataFrame
     elif kind == "dense":
         from er.blocking.channels.dense import dense_channel
 
-        df = dense_channel(queries, targets, ch.get("k", 50), queries["row"].to_numpy(), split)
+        df = dense_channel(queries, targets, ch.get("k", 50), queries["row"].to_numpy(), split,
+                           ch.get("partition"))
     else:
         raise ValueError(kind)
     return add_ranks(df).with_columns(pl.lit(ch["id"]).alias("channel")), stats
@@ -96,23 +102,41 @@ class Context:
             frames.append(df)
         cands = pl.concat(frames, how="diagonal_relaxed").select(
             "s1_id", "target_id", "src", "channel", "score", "rank")
-        print(f"  [{label}] {queries.height:,} queries → {cands.height:,} channel pairs")
+        print(f"  [{label}] {queries.height:,} queries -> {cands.height:,} channel pairs")
         return cands, queries
 
 
-def train_ranker(cfg: dict):
+def precut(cands: pl.DataFrame, cfg: dict) -> pl.DataFrame:
+    """Keep pairs ranked ≤ R by at least one channel (all their channel rows kept for provenance features)."""
+    r = cfg.get("ranker", {}).get("precut")
+    if not r:
+        return cands
+    keep = cands.filter(pl.col("rank") <= r).select("s1_id", "target_id").unique()
+    return cands.join(keep, on=["s1_id", "target_id"], how="semi")
+
+
+def train_ranker(cfg: dict, ctx: Context | None = None):
     """Fit the stage-2 ranker on the train-fold rtrain sample against the TRAIN target pool."""
     from er.blocking import ranker
 
-    ctx = Context(cfg, "train")
+    ctx = ctx or Context(cfg, "train")
     channels = [ch["id"] for ch in cfg["channels"]]
     feats = ranker.feature_names(channels)
     ids = subset_ids(load_split(), cfg["ranker"].get("train_subset", "rtrain"))
     cands, queries = ctx.collect(ids, "ranker-train", {})
-    df = ranker.build(cands, channels, queries, ctx.all_targets)
+    # Canonical row order: HistGradientBoosting's early-stopping split depends on it.
+    df = ranker.build(precut(cands, cfg), channels, queries, ctx.all_targets).sort("s1_id", "target_id")
     y = ranker.label(df, io.load_truth().filter(pl.col("s1_id").is_in(ids.implode())))
     model = ranker.fit(df, y, feats)
     return model, feats, channels, {"train_pairs": int(len(y)), "pos_rate": float(y.mean())}
+
+
+def release_caches() -> None:
+    from er.blocking.channels import dense, exact, sparse
+
+    for cache in (sparse._PREPARED, exact._TARGET_CACHE, dense._GPU, _HOUSE_DF, _HOUSE_TK):
+        cache.clear()
+    gc.collect()
 
 
 def _chunks(ids: pl.Series, size: int):
@@ -136,7 +160,7 @@ def run(config_path: str, subset: str | None = None) -> dict:
     if use_ranker:
         from er.blocking import ranker
 
-        model, feats, channels, ranker_meta = train_ranker(cfg)
+        model, feats, channels, ranker_meta = train_ranker(cfg, ctx)
         ranker_meta["train_s"] = round(time.perf_counter() - t_start, 1)
 
     ids = subset_ids(load_split(), subset)
@@ -158,9 +182,16 @@ def run(config_path: str, subset: str | None = None) -> dict:
         for ch, n in solo.group_by(pl.col("channels").list.first()).len().iter_rows():
             unique[ch] += n
         if use_ranker:
-            ranked = ranker.rank_by_model(ranker.build(cands, channels, queries, ctx.all_targets), model, feats)
+            cut = precut(cands, cfg)
+            rows["precut"].append(row_table(truth, cut))
+            t0 = time.perf_counter()
+            ranked = ranker.rank_by_model(ranker.build(cut, channels, queries, ctx.all_targets), model, feats)
+            timings["ranker"] = timings.get("ranker", 0.0) + time.perf_counter() - t0
             for k in cfg["ranker"].get("budgets", budgets):
                 rows[f"ranker@{k}"].append(row_table(truth, ranked.filter(pl.col("frank") <= k)))
+            del cut, ranked
+        del cands, fused, solo, queries
+        gc.collect()
 
     truth = truth_all.filter(pl.col("s1_id").is_in(ids.implode()))
     slices = truth.select("s1_id", _cardinality_bucket().alias("cardinality")).join(
@@ -182,6 +213,7 @@ def run(config_path: str, subset: str | None = None) -> dict:
     if use_ranker:
         rb = cfg["ranker"].get("budgets", budgets)
         metrics["ranked"] = {str(k): agg(f"ranker@{k}", k in (10, max(rb))) for k in rb}
+        metrics["precut_union"] = agg("precut")
         metrics["ranker"] = ranker_meta
     metrics.update({
         "run_id": run_id, "config": cfg, "subset": subset, "norm_variant": ctx.norm.variant,
@@ -200,13 +232,19 @@ def infer(config_path: str, k: int, out_dir: Path) -> dict:
     cfg = tomllib.loads(Path(config_path).read_text(encoding="utf-8"))
     t0 = time.perf_counter()
     model, feats, channels, meta = train_ranker(cfg)
+    release_caches()  # drop train-pool matrices/tables before loading the test pool
     ctx = Context(cfg, "test")
     ids = ctx.s1["entity_id"]
     parts, timings = [], {}
     for chunk in _chunks(ids, cfg.get("chunk", CHUNK)):
         cands, queries = ctx.collect(chunk, "test", timings)
-        ranked = ranker.rank_by_model(ranker.build(cands, channels, queries, ctx.all_targets), model, feats)
+        t1 = time.perf_counter()
+        ranked = ranker.rank_by_model(ranker.build(precut(cands, cfg), channels, queries, ctx.all_targets),
+                                      model, feats)
+        timings["ranker"] = timings.get("ranker", 0.0) + time.perf_counter() - t1
         parts.append(ranked.filter(pl.col("frank") <= k).select("s1_id", "target_id", "p"))
+        del cands, queries, ranked
+        gc.collect()
     sel = pl.concat(parts)
     out_dir.mkdir(parents=True, exist_ok=True)
     sel.write_parquet(io.ARTIFACTS / "candidates" / f"test_{Path(config_path).stem}_k{k}.parquet", mkdir=True)

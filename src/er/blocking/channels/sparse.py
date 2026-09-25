@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -18,7 +17,7 @@ from sparse_dot_topn import sp_matmul_topn
 from er import io
 
 N_FEATURES = 2**21
-THREADS = os.cpu_count() or 12
+THREADS = io.THREADS
 
 
 @dataclass(frozen=True)
@@ -87,50 +86,35 @@ def weighted(m: sp.csr_matrix, idf: np.ndarray, weight: float) -> sp.csr_matrix:
     return m.tocsr()
 
 
-def sparse_topk(qmat: sp.csr_matrix, tmat: sp.csr_matrix, k: int, threshold: float) -> tuple[np.ndarray, ...]:
-    tmat_t = tmat.T.tocsr()
-    res = sp_matmul_topn(qmat, tmat_t, top_n=k, threshold=threshold, sort=True, n_threads=THREADS)
-    res = res.tocoo()
-    return res.row, res.col, res.data
-
-
-def _topk_frame(qids: pl.Series, tids: pl.Series, qmat: sp.csr_matrix, tmat: sp.csr_matrix, k: int,
+def _topk_block(qids: pl.Series, qmat: sp.csr_matrix, block: tuple[pl.Series, sp.csr_matrix], k: int,
                 threshold: float) -> pl.DataFrame:
-    if qmat.shape[0] == 0 or tmat.shape[0] == 0:
+    tids, tmat_t = block
+    if qmat.shape[0] == 0 or tmat_t.shape[1] == 0:
         return pl.DataFrame(schema={"s1_id": pl.Utf8, "target_id": pl.Utf8, "score": pl.Float32})
-    rows, cols, vals = sparse_topk(qmat, tmat, k, threshold)
-    return pl.DataFrame({"s1_id": qids.gather(rows), "target_id": tids.gather(cols),
-                         "score": vals.astype(np.float32)})
+    res = sp_matmul_topn(qmat, tmat_t, top_n=k, threshold=threshold, sort=True, n_threads=THREADS).tocoo()
+    return pl.DataFrame({"s1_id": qids.gather(res.row), "target_id": tids.gather(res.col),
+                         "score": res.data.astype(np.float32)})
 
 
-def _partitioned(qids: pl.Series, qkey: np.ndarray, qmat: sp.csr_matrix, tids: pl.Series, tkey: np.ndarray,
-                 tmat: sp.csr_matrix, k: int, threshold: float) -> pl.DataFrame:
-    """Query with key r searches targets with key r plus unkeyed targets; unkeyed queries search everything."""
-    parts = []
-    t_unknown = np.flatnonzero(tkey == "")
-    q_known = np.flatnonzero(qkey != "")
-    q_unknown = np.flatnonzero(qkey == "")
-    parts.append(_topk_frame(qids.gather(q_unknown), tids, qmat[q_unknown], tmat, k, threshold))
-    parts.append(_topk_frame(qids.gather(q_known), tids.gather(t_unknown), qmat[q_known], tmat[t_unknown], k,
-                             threshold))
-    t_order = np.argsort(tkey, kind="stable")
-    t_sorted = tkey[t_order]
-    for r in np.unique(qkey[q_known]):
-        qi = q_known[qkey[q_known] == r]
-        lo, hi = np.searchsorted(t_sorted, r, "left"), np.searchsorted(t_sorted, r, "right")
-        ti = t_order[lo:hi]
-        parts.append(_topk_frame(qids.gather(qi), tids.gather(ti), qmat[qi], tmat[ti], k, threshold))
-    df = pl.concat(parts)
-    return df.sort("score", descending=True).group_by("s1_id", maintain_order=True).head(k)
+Blocks = dict[str, tuple[pl.Series, sp.csr_matrix]]  # block key → (target ids, transposed features×targets)
+_PREPARED: dict[tuple, tuple[list[np.ndarray], dict[str, Blocks]]] = {}
+ALL = "*"
 
 
-_PREPARED: dict[tuple, tuple[list[np.ndarray], dict[str, sp.csr_matrix]]] = {}
+def _blocks(tids: pl.Series, tmat: sp.csr_matrix, tkey: np.ndarray | None) -> Blocks:
+    """Pre-transposed target blocks, built once: the per-call transpose and row slicing were the old hot spot."""
+    if tkey is None:
+        return {ALL: (tids, tmat.T.tocsr())}
+    order = np.argsort(tkey, kind="stable")
+    keys, starts = np.unique(tkey[order], return_index=True)
+    ends = list(starts[1:]) + [len(order)]
+    return {str(r): (tids.gather(order[a:b]), tmat[order[a:b]].T.tocsr()) for r, a, b in zip(keys, starts, ends)}
 
 
-def _prepare_targets(targets: dict[str, pl.DataFrame], fields: list[FieldSpec], max_df: float,
-                     variant: str) -> tuple[list[np.ndarray], dict[str, sp.csr_matrix]]:
-    """IDF + weighted/normalized target matrices, built once per process and reused across query chunks."""
-    key = (variant, tuple(fields), max_df)
+def _prepare_targets(targets: dict[str, pl.DataFrame], fields: list[FieldSpec], max_df: float, variant: str,
+                     partition: str | None) -> tuple[list[np.ndarray], dict[str, Blocks]]:
+    """IDF + weighted/normalized target blocks, built once per process and reused across query chunks."""
+    key = (variant, tuple(fields), max_df, partition)
     if key not in _PREPARED:
         idfs, t_parts = [], {src: [] for src in targets}
         for f in fields:
@@ -140,26 +124,44 @@ def _prepare_targets(targets: dict[str, pl.DataFrame], fields: list[FieldSpec], 
             for src, m in tcounts.items():
                 t_parts[src].append(weighted(m, idf, f.weight))
             del tcounts
-        tmats = {src: normalize(sp.hstack(p).tocsr()) if len(p) > 1 else p[0] for src, p in t_parts.items()}
-        _PREPARED[key] = (idfs, tmats)
+        blocks = {}
+        for src, parts in list(t_parts.items()):
+            tmat = normalize(sp.hstack(parts).tocsr()) if len(parts) > 1 else parts[0]
+            del t_parts[src]
+            tkey = targets[src][partition].fill_null("").to_numpy().astype(str) if partition else None
+            blocks[src] = _blocks(targets[src]["entity_id"], tmat, tkey)
+        _PREPARED[key] = (idfs, blocks)
     return _PREPARED[key]
+
+
+def _search(qids: pl.Series, qmat: sp.csr_matrix, blocks: Blocks, qkey: np.ndarray | None, k: int,
+            threshold: float) -> pl.DataFrame:
+    """Keyed query r searches blocks {r, unknown}; unkeyed queries search every block. Exact top-k per query."""
+    if qkey is None:
+        return _topk_block(qids, qmat, blocks[ALL], k, threshold)
+    parts = []
+    known = qkey != ""
+    q_unknown = np.flatnonzero(~known)
+    if len(q_unknown):
+        sub_ids, sub = qids.gather(q_unknown), qmat[q_unknown]
+        parts += [_topk_block(sub_ids, sub, b, k, threshold) for b in blocks.values()]
+    q_known = np.flatnonzero(known)
+    if "" in blocks and len(q_known):
+        parts.append(_topk_block(qids.gather(q_known), qmat[q_known], blocks[""], k, threshold))
+    for r in np.unique(qkey[q_known]):
+        if r in blocks:
+            qi = q_known[qkey[q_known] == r]
+            parts.append(_topk_block(qids.gather(qi), qmat[qi], blocks[r], k, threshold))
+    df = pl.concat(parts)
+    return df.sort("score", descending=True).group_by("s1_id", maintain_order=True).head(k)
 
 
 def sparse_channel(queries: pl.DataFrame, targets: dict[str, pl.DataFrame], fields: list[FieldSpec],
                    k: int, max_df: float, threshold: float, variant: str,
                    partition: str | None = None) -> pl.DataFrame:
-    idfs, tmats = _prepare_targets(targets, fields, max_df, variant)
+    idfs, blocks = _prepare_targets(targets, fields, max_df, variant, partition)
     q_parts = [weighted(hash_texts(queries[f.col].fill_null("").to_list(), f), idf, f.weight)
                for f, idf in zip(fields, idfs)]
     qmat = normalize(sp.hstack(q_parts).tocsr()) if len(fields) > 1 else q_parts[0]
-    qids = queries["entity_id"]
-    out = []
-    for src, tmat in tmats.items():
-        tids = targets[src]["entity_id"]
-        if partition:
-            out.append(_partitioned(qids, queries[partition].fill_null("").to_numpy().astype(str), qmat, tids,
-                                    targets[src][partition].fill_null("").to_numpy().astype(str), tmat, k,
-                                    threshold))
-        else:
-            out.append(_topk_frame(qids, tids, qmat, tmat, k, threshold))
-    return pl.concat(out)
+    qkey = queries[partition].fill_null("").to_numpy().astype(str) if partition else None
+    return pl.concat([_search(queries["entity_id"], qmat, b, qkey, k, threshold) for b in blocks.values()])
