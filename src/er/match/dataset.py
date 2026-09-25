@@ -145,15 +145,22 @@ class Universe:
     def shortlist(self, i: int) -> pl.DataFrame:
         return pl.read_parquet(self._shortlist_path(i, self.chunks[i]))
 
-    def global_context(self) -> pl.DataFrame:
+    def global_context(self, parts: int = 1) -> pl.DataFrame:
+        """parts > 1: competitors counted within hash partitions of S1, to match the S1-per-target density
+        the model was trained at (a val-scope bundle sees ~4.3% of S1 per target pool; test sees 100%)."""
         # keyed by the exact chunk set: a context over a partial universe must never be reused
-        path = self.dir / f"global_context_{_h([_h(c.to_list()) for c in self.chunks])}.parquet"
+        key = _h([_h(c.to_list()) for c in self.chunks]) + ("" if parts == 1 else f"_p{parts}")
+        path = self.dir / f"global_context_{key}.parquet"
         if not path.exists():
             slim = pl.concat([
                 pl.read_parquet(self._shortlist_path(i, c), columns=["s1_id", "target_id", features.CTX_SCORE])
                 for i, c in enumerate(self.chunks)
             ])
-            ctx = features.global_context(slim)
+            if parts == 1:
+                ctx = features.global_context(slim)
+            else:
+                slim = slim.with_columns((pl.col("s1_id").hash(seed=7) % parts).alias("_part"))
+                ctx = pl.concat([features.global_context(slim.filter(pl.col("_part") == k)) for k in range(parts)])
             tmp = path.with_suffix(".partial")
             ctx.write_parquet(tmp)
             tmp.replace(path)

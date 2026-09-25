@@ -172,7 +172,7 @@ def cmd_decide2(args: argparse.Namespace) -> None:
 def cmd_submit2(args: argparse.Namespace) -> None:
     from er.match import v2
 
-    print(json.dumps(v2.submit(args.name), indent=2, default=str))
+    print(json.dumps(v2.submit(args.name, args.ctx_parts), indent=2, default=str))
 
 
 def cmd_leaderboard(args: argparse.Namespace) -> None:
@@ -289,6 +289,7 @@ def main() -> None:
 
     sp = sub.add_parser("submit2", help="score the test universe with a fit2 bundle; write both TSVs")
     sp.add_argument("--name", default="v2")
+    sp.add_argument("--ctx-parts", type=int, default=None, help="competitor partitions (default: density-matched)")
     sp.set_defaults(fn=cmd_submit2)
 
     sp = sub.add_parser("leaderboard", help="rebuild reports/leaderboard.md")

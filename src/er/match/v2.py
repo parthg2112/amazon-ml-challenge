@@ -19,7 +19,7 @@ from er.match import features, train
 from er.blocking.runner import release_caches
 from er.match.dataset import Universe
 from er.metrics import macro_f05
-from er.split import load_split
+from er.split import load_split, subset_ids
 
 MODELS = io.ARTIFACTS / "models" / "match"
 
@@ -100,7 +100,7 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
                                       for c in df["q_country"].unique().sort().to_list()]
     MODELS.mkdir(parents=True, exist_ok=True)
     bundle = {"models": block["models"], "iso": block["iso"], "features": feats, "policy": block["policy"],
-              "config": config_path, "k": k}
+              "config": config_path, "k": k, "scope": scope}
     (MODELS / f"{name}.pkl").write_bytes(pickle.dumps(bundle))
     block["oof"].write_parquet(io.ARTIFACTS / "match" / f"oof_{name}.parquet", mkdir=True)
     result["total_s"] = round(time.perf_counter() - t0, 1)
@@ -108,14 +108,25 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
     return result
 
 
-def submit(name: str = "v2") -> dict:
+def ctx_parts(bundle: dict) -> int:
+    """Test partitions giving the same S1-per-target density the bundle's context was trained on."""
+    if bundle.get("scope", "val") == "full":
+        return 1
+    n_tg = {s: sum(io.load_source(s, src).height for src in io.TARGET_SOURCES) for s in ("train", "test")}
+    train_density = subset_ids(load_split(), "val").len() / n_tg["train"]
+    test_density = io.load_source("test", "S1").height / n_tg["test"]
+    return max(1, round(test_density / train_density))
+
+
+def submit(name: str = "v2", parts: int | None = None) -> dict:
     """Score every test S1 with the frozen bundle (fold-mean + calibration + policy); write both TSVs."""
     bundle = pickle.loads((MODELS / f"{name}.pkl").read_bytes())
+    parts = ctx_parts(bundle) if parts is None else parts
     uni = Universe(bundle["config"], "test", bundle["k"])
     uni.shortlists()
     uni._ctx = None  # pass 2 needs only cached shortlists + pools: drop the blocking context (~20 GB)
     release_caches()
-    gctx = uni.global_context()
+    gctx = uni.global_context(parts)
     feats = bundle["features"]
     block = {"models": bundle["models"], "iso": bundle["iso"]}
     parts = []
@@ -126,7 +137,7 @@ def submit(name: str = "v2") -> dict:
         del df
         gc.collect()
     scored = pl.concat(parts)
-    scored.write_parquet(io.ARTIFACTS / "match" / f"test_scored_{name}.parquet", mkdir=True)  # for diagnostics
+    scored.write_parquet(io.ARTIFACTS / "match" / f"test_scored_{name}_p{parts}.parquet", mkdir=True)  # for diagnostics
     preds = _policy_predict(scored, bundle["policy"])
 
     test_ids = pl.concat(uni.chunks)
@@ -146,7 +157,7 @@ def submit(name: str = "v2") -> dict:
     write(scored, "candidate_entity_ids", "candidate_pairs.tsv")
     stats = {"name": name, "test_s1": test_ids.len(), "scored_pairs": scored.height,
              "predicted_pairs": preds.height, "s1_with_matches": int((full["matched_entity_ids"] != "").sum()),
-             "policy": bundle["policy"]}
+             "policy": bundle["policy"], "ctx_parts": parts}
     (io.REPORTS / f"submit_{name}.json").write_text(json.dumps(stats, indent=2))
     return stats
 
