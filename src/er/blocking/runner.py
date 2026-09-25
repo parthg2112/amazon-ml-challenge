@@ -339,29 +339,19 @@ def _match_pool(split: str, norm_cfg: NormConfig) -> tuple[pl.DataFrame, pl.Data
     return s1, targets
 
 
-def collect_match_features(config_path: str, subset: str, k: int) -> tuple[pl.DataFrame, list[str]]:
-    """Step 4 input: blocking ranker's per-S1 shortlist, with channel provenance and match features.
-
-    Chunked like `run`/`infer` so this scales to the full train fold. Returns (features_df, extra_feature_cols)
-    where extra_feature_cols are the blocking-stage columns (channel provenance + ranker probability) to
-    add to `er.match.features.NUMERIC_FEATURES`.
-    """
+def _collect_match_features_chunked(cfg: dict, ctx: Context, ids: pl.Series, k: int, model, feats: list[str],
+                                    channels: list[str], match_s1: pl.DataFrame, match_targets: pl.DataFrame,
+                                    name_idf, addr_idf, label: str) -> tuple[pl.DataFrame, list[str]]:
+    """Shared chunked loop behind `collect_match_features` (train-fold, labeled) and
+    `collect_match_features_test` (real test set, unlabeled) — same ranker model, same IDF tables,
+    just a different `ctx`/`ids`/query pool so train and test go through identical feature code."""
     from er.blocking import ranker
     from er.match import features
-    from er.match.idf import build_word_idf
 
-    cfg = tomllib.loads(Path(config_path).read_text(encoding="utf-8"))
-    ctx = Context(cfg, "train")
-    model, feats, channels, _meta = train_ranker(cfg, ctx)
-    match_s1, match_targets = _match_pool("train", ctx.norm)
-    name_idf = build_word_idf(match_targets, "name_core")
-    addr_idf = build_word_idf(match_targets, "addr_content")
-
-    ids = subset_ids(load_split(), subset)
     parts, timings = [], {}
     extra: list[str] | None = None
     for chunk in _chunks(ids, cfg.get("chunk", CHUNK)):
-        cands, queries = ctx.collect(chunk, subset, timings)
+        cands, queries = ctx.collect(chunk, label, timings)
         # Same pre-cut as ranker training, or the ranker scores a candidate distribution it never saw.
         ranked = ranker.rank_by_model(ranker.build(precut(cands, cfg), channels, queries, ctx.all_targets),
                                       model, feats)
@@ -379,6 +369,52 @@ def collect_match_features(config_path: str, subset: str, k: int) -> tuple[pl.Da
         gc.collect()
     df = pl.concat(parts, how="diagonal_relaxed")
     return df, extra or []
+
+
+def collect_match_features(config_path: str, subset: str, k: int) -> tuple[pl.DataFrame, list[str]]:
+    """Step 4 input: blocking ranker's per-S1 shortlist, with channel provenance and match features.
+
+    Chunked like `run`/`infer` so this scales to the full train fold. Returns (features_df, extra_feature_cols)
+    where extra_feature_cols are the blocking-stage columns (channel provenance + ranker probability) to
+    add to `er.match.features.NUMERIC_FEATURES`.
+    """
+    from er.match.idf import build_word_idf
+
+    cfg = tomllib.loads(Path(config_path).read_text(encoding="utf-8"))
+    ctx = Context(cfg, "train")
+    model, feats, channels, _meta = train_ranker(cfg, ctx)
+    match_s1, match_targets = _match_pool("train", ctx.norm)
+    name_idf = build_word_idf(match_targets, "name_core")
+    addr_idf = build_word_idf(match_targets, "addr_content")
+
+    ids = subset_ids(load_split(), subset)
+    return _collect_match_features_chunked(cfg, ctx, ids, k, model, feats, channels, match_s1, match_targets,
+                                           name_idf, addr_idf, subset)
+
+
+def collect_match_features_test(config_path: str, k: int) -> tuple[pl.DataFrame, list[str], pl.Series]:
+    """Test-set counterpart to `collect_match_features`: the ranker and IDF tables are fit on train (the
+    real test set has no labels to fit or tune anything against), then every test S1 is scored against the
+    test S2/S3 pool. Returns (features_df, extra_feature_cols, test_s1_ids) — `test_s1_ids` includes S1s
+    with zero candidates, so the caller can still emit an empty-match row for them.
+    """
+    from er.match.idf import build_word_idf
+
+    cfg = tomllib.loads(Path(config_path).read_text(encoding="utf-8"))
+    train_ctx = Context(cfg, "train")
+    model, feats, channels, _meta = train_ranker(cfg, train_ctx)
+    _match_s1_train, match_targets_train = _match_pool("train", train_ctx.norm)
+    name_idf = build_word_idf(match_targets_train, "name_core")
+    addr_idf = build_word_idf(match_targets_train, "addr_content")
+    release_caches()  # drop train-pool matrices/tables before loading the test pool
+
+    test_ctx = Context(cfg, "test")
+    match_s1_test, match_targets_test = _match_pool("test", test_ctx.norm)
+    ids = test_ctx.s1["entity_id"]
+
+    df, extra = _collect_match_features_chunked(cfg, test_ctx, ids, k, model, feats, channels, match_s1_test,
+                                                match_targets_test, name_idf, addr_idf, "test")
+    return df, extra, ids
 
 
 def leaderboard() -> str:
