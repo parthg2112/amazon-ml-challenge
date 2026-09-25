@@ -264,3 +264,33 @@ NUMERIC_FEATURES = (
 )
 CATEGORICAL_FEATURES = ["legal_relation", "house_state", "region_state", "postal_state", "locality_state",
                         "unit_state"]
+
+
+# ---------------------------------------------------------------- country-transfer views (area 2)
+#
+# An absolute similarity carries a country's scale: French tokenization, address shape and legal forms
+# shift every score for the record at once, so a threshold learned on US+India lands in the wrong place
+# on France. Measured against a candidate's own competitors, that shared shift cancels. Both views below
+# are computed strictly within one S1's own shortlist, so — unlike `margin_to_best_competitor` — they do
+# not depend on how many other S1 exist and cannot repeat the train/test density mismatch of M1/M7.
+
+RELATIVE_BASE = [
+    "p", "score_B7_dense", "dense_cos", "sim_name_tset", "sim_name_ratio", "sim_addr_tset",
+    "sim_min_tset", "sim_full_tset", "name_tok_overlap_idf", "addr_tok_overlap_idf",
+    "name_tok_extra_t_idf", "name_tok_extra_q_idf",
+]
+
+
+def relative_names(base: list[str]) -> list[str]:
+    return [f"{c}_rel" for c in base] + [f"{c}_rk" for c in base]
+
+
+# distinct name: `add_relative` above (gap/z views) feeds the v3 bundle
+def add_rank_relative(df: pl.DataFrame, base: list[str] | None = None) -> pl.DataFrame:
+    """Per S1: each score minus that record's best (`_rel`, 0 for the best) and its rank (`_rk`)."""
+    base = [c for c in (RELATIVE_BASE if base is None else base) if c in df.columns]
+    return df.with_columns(
+        *[(pl.col(c) - pl.col(c).max().over("s1_id")).cast(pl.Float32).alias(f"{c}_rel") for c in base],
+        *[pl.col(c).rank("ordinal", descending=True).over("s1_id").cast(pl.Int32).alias(f"{c}_rk")
+          for c in base],
+    )
