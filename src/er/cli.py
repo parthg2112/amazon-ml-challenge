@@ -163,6 +163,12 @@ def cmd_fit2(args: argparse.Namespace) -> None:
     print(json.dumps({k: r.get(k) for k in keep}, indent=2, default=str))
 
 
+def cmd_decide2(args: argparse.Namespace) -> None:
+    from er.match import v2
+
+    print(json.dumps(v2.redecide(args.name), indent=2, default=str))
+
+
 def cmd_submit2(args: argparse.Namespace) -> None:
     from er.match import v2
 
@@ -276,6 +282,10 @@ def main() -> None:
     sp.add_argument("--scope", default="val", choices=["val", "full"], help="competitor universe for context")
     sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "lgbm"])
     sp.set_defaults(fn=cmd_fit2)
+
+    sp = sub.add_parser("decide2", help="re-run the Step 5 policy on saved v2 OOF (no retraining)")
+    sp.add_argument("--name", default="v2")
+    sp.set_defaults(fn=cmd_decide2)
 
     sp = sub.add_parser("submit2", help="score the test universe with a fit2 bundle; write both TSVs")
     sp.add_argument("--name", default="v2")

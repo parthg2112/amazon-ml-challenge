@@ -109,3 +109,32 @@ def test_singleton_accuracy():
     assert evaluate.singleton_accuracy(preds_correct_empty, truth) == 1.0
     preds_wrong = pl.DataFrame({"s1_id": ["S1-1"], "target_id": ["S2-9"]})
     assert evaluate.singleton_accuracy(preds_wrong, truth) == 0.0
+
+
+def test_exact_expected_f05_matches_brute_force():
+    import itertools
+
+    import numpy as np
+
+    from er.decide.exact_f05 import expected_f05_matrix
+
+    p = np.array([0.9, 0.6, 0.3, 0.05])
+    got = expected_f05_matrix(p[None, :])[0]
+    for k in range(len(p) + 1):
+        exp = 0.0
+        for ys in itertools.product([0, 1], repeat=len(p)):
+            prob = np.prod([pi if y else 1 - pi for pi, y in zip(p, ys)])
+            t, tp = sum(ys), sum(ys[:k])
+            f = 1.0 if (k == 0 and t == 0) else (1.25 * tp / (k + 0.25 * t) if (k + t) else 0.0)
+            exp += prob * f
+        assert got[k] == pytest.approx(exp), k
+
+
+def test_exact_select_predicts_nothing_for_weak_candidates():
+    from er.decide.exact_f05 import select
+
+    df = pl.DataFrame({"s1_id": ["S1-1"] * 3 + ["S1-2"] * 2, "target_id": ["a", "b", "c", "d", "e"],
+                       "src": ["S2"] * 5, "p": [0.95, 0.9, 0.2, 0.05, 0.02]})
+    out = select(df)
+    assert set(out.filter(pl.col("s1_id") == "S1-1")["target_id"]) == {"a", "b"}
+    assert out.filter(pl.col("s1_id") == "S1-2").height == 0  # singleton: empty prediction wins

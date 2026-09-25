@@ -14,7 +14,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 
 from er import io
 from er.blocking import ranker
-from er.decide import exclusivity, expected_f05, pipeline, threshold
+from er.decide import exact_f05, exclusivity, expected_f05, pipeline, threshold
 from er.match import features, train
 from er.match.dataset import Universe
 from er.metrics import macro_f05
@@ -28,6 +28,8 @@ def _policy_predict(scored: pl.DataFrame, policy: dict) -> pl.DataFrame:
             else exclusivity.resolve_max_probability(scored))
     if policy["decision_winner"] == "tuned_global_threshold":
         return threshold.predict(excl, policy["threshold"])
+    if policy["decision_winner"] == "exact_expected_f05":
+        return exact_f05.select(excl).select("s1_id", "target_id")
     return expected_f05.select(excl).select("s1_id", "target_id")
 
 
@@ -143,3 +145,28 @@ def submit(name: str = "v2") -> dict:
              "policy": bundle["policy"]}
     (io.REPORTS / f"submit_{name}.json").write_text(json.dumps(stats, indent=2))
     return stats
+
+
+def redecide(name: str = "v2") -> dict:
+    """Re-run the Step 5 policy on saved OOF (no retraining) and update the bundle's frozen policy."""
+    oof = pl.read_parquet(io.ARTIFACTS / "match" / f"oof_{name}.parquet")
+    if "cv_fold" not in oof.columns:
+        oof = oof.join(load_split().select("s1_id", "cv_fold"), on="s1_id", how="left")
+    truth = io.load_truth()
+    decision = pipeline.run(oof, truth)
+    policy = {"decision_winner": decision["decision_winner"], "exclusivity_winner": decision["exclusivity_winner"],
+              "threshold": decision["global_threshold"]["best"]}
+    by_country = {}
+    for c in oof["q_country"].unique().sort().to_list():
+        sub = oof.filter(pl.col("q_country") == c)
+        t_sub = truth.filter(pl.col("s1_id").is_in(sub["s1_id"].unique().implode()))
+        by_country[c] = macro_f05(t_sub, _policy_predict(sub, policy))
+    bundle_path = MODELS / f"{name}.pkl"
+    bundle = pickle.loads(bundle_path.read_bytes())
+    bundle["policy"] = policy
+    bundle_path.write_bytes(pickle.dumps(bundle))
+    out = {"policy": policy, "by_country_frozen_policy": by_country,
+           "stages": {k: v["macro_f05"] for k, v in decision["stages"].items()},
+           "nested_threshold": decision["nested_threshold"]}
+    (io.REPORTS / "match" / f"{name}_decision.json").write_text(json.dumps(out, indent=2, default=str))
+    return out
