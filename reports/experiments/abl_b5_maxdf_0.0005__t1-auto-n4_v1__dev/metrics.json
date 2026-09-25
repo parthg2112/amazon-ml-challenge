@@ -1,0 +1,302 @@
+{
+  "budgets": {
+    "10": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.35006191788668484,
+      "pair_recall": 0.24820672035186442,
+      "full_coverage": 0.13517107106394094,
+      "mean_candidates": 13.067295385651734,
+      "predict_all_f05": 0.07040676258709565,
+      "true_links": 154605,
+      "candidate_pairs": 581952,
+      "candidate_precision": 0.06594014626635873,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 1560,
+      "candidates_p50": 20.0,
+      "candidates_p95": 20.0,
+      "candidates_p99": 20.0,
+      "candidates_max": 20,
+      "reduction_ratio": 0.9999987338160764,
+      "pair_recall_by_source": {
+        "S2": 0.2582186569853579,
+        "S3": 0.23879323327142213
+      },
+      "mean_candidates_by_source": {
+        "S3": 6.5336252385764,
+        "S2": 6.533670147075334
+      }
+    },
+    "20": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.3807685451942319,
+      "pair_recall": 0.2747194463309725,
+      "full_coverage": 0.15269368663485053,
+      "mean_candidates": 26.129650836420794,
+      "predict_all_f05": 0.048323516132847036,
+      "true_links": 154605,
+      "candidate_pairs": 1163684,
+      "candidate_precision": 0.03649874020782274,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 1560,
+      "candidates_p50": 40.0,
+      "candidates_p95": 40.0,
+      "candidates_p99": 40.0,
+      "candidates_max": 40,
+      "reduction_ratio": 0.9999974681108186,
+      "pair_recall_by_source": {
+        "S2": 0.2853005165440931,
+        "S3": 0.26477084483710656
+      },
+      "mean_candidates_by_source": {
+        "S2": 13.064466150218928,
+        "S3": 13.065184686201864
+      }
+    },
+    "30": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.40336891073085657,
+      "pair_recall": 0.2935351379321497,
+      "full_coverage": 0.1641617399149987,
+      "mean_candidates": 39.18491074435837,
+      "predict_all_f05": 0.04016986169190676,
+      "true_links": 154605,
+      "candidate_pairs": 1745100,
+      "candidate_precision": 0.026005386510801674,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 1560,
+      "candidates_p50": 60.0,
+      "candidates_p95": 60.0,
+      "candidates_p99": 60.0,
+      "candidates_max": 60,
+      "reduction_ratio": 0.9999962030930987,
+      "pair_recall_by_source": {
+        "S2": 0.3043472457655397,
+        "S3": 0.28336930876964006
+      },
+      "mean_candidates_by_source": {
+        "S2": 19.591489839452116,
+        "S3": 19.593420904906253
+      }
+    },
+    "50": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.4355177093576586,
+      "pair_recall": 0.3209533973674849,
+      "full_coverage": 0.180592159935418,
+      "mean_candidates": 65.27484001347256,
+      "predict_all_f05": 0.03311737490512079,
+      "true_links": 154605,
+      "candidate_pairs": 2907015,
+      "candidate_precision": 0.017069399366704333,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 1560,
+      "candidates_p50": 100.0,
+      "candidates_p95": 100.0,
+      "candidates_p99": 100.0,
+      "candidates_max": 100,
+      "reduction_ratio": 0.9999936750528247,
+      "pair_recall_by_source": {
+        "S2": 0.3330841820050453,
+        "S3": 0.30954771346819937
+      },
+      "mean_candidates_by_source": {
+        "S3": 32.64001347254968,
+        "S2": 32.63482654092287
+      },
+      "slices": {
+        "cardinality": {
+          "2-3": {
+            "s1_rows": 18249,
+            "oracle_ceiling_f05": 0.3936037294577489,
+            "pair_recall": 0.3217009916094584,
+            "full_coverage": 0.20899775330155076,
+            "mean_candidates": 65.38089758342923
+          },
+          "6+": {
+            "s1_rows": 5193,
+            "oracle_ceiling_f05": 0.42736803647893096,
+            "pair_recall": 0.32098434004474274,
+            "full_coverage": 0.11554015020219527,
+            "mean_candidates": 65.75197381089929
+          },
+          "1": {
+            "s1_rows": 2409,
+            "oracle_ceiling_f05": 0.3287671232876712,
+            "pair_recall": 0.3287671232876712,
+            "full_coverage": 0.3287671232876712,
+            "mean_candidates": 64.2615193026152
+          },
+          "0": {
+            "s1_rows": 2418,
+            "oracle_ceiling_f05": 1.0,
+            "pair_recall": null,
+            "full_coverage": null,
+            "mean_candidates": 64.42018196856907
+          },
+          "4-5": {
+            "s1_rows": 16266,
+            "oracle_ceiling_f05": 0.41704072998486286,
+            "pair_recall": 0.32018188177684503,
+            "full_coverage": 0.14754703061600885,
+            "mean_candidates": 65.28064674781753
+          }
+        },
+        "country": {
+          "US": {
+            "s1_rows": 26867,
+            "oracle_ceiling_f05": 0.3737680344982552,
+            "pair_recall": 0.26369708554369536,
+            "full_coverage": 0.14001970443349754,
+            "mean_candidates": 61.02516097815164
+          },
+          "India": {
+            "s1_rows": 17668,
+            "oracle_ceiling_f05": 0.5294178969537413,
+            "pair_recall": 0.4076736658913846,
+            "full_coverage": 0.2420857723091626,
+            "mean_candidates": 71.73715191306316
+          }
+        }
+      }
+    }
+  },
+  "channels": {
+    "B5_name_addr": {
+      "pair_recall": 0.3209533973674849,
+      "full_coverage": 0.180592159935418,
+      "oracle_ceiling_f05": 0.4355177093576586,
+      "mean_candidates": 65.27484001347256,
+      "unique_links": 49621,
+      "unique_link_share": 0.3209533973674849
+    }
+  },
+  "union": {
+    "s1_rows": 44535,
+    "oracle_ceiling_f05": 0.4355177093576586,
+    "pair_recall": 0.3209533973674849,
+    "full_coverage": 0.180592159935418,
+    "mean_candidates": 65.27484001347256,
+    "predict_all_f05": 0.03311737490512079,
+    "true_links": 154605,
+    "candidate_pairs": 2907015,
+    "candidate_precision": 0.017069399366704333,
+    "singleton_rows": 2418,
+    "singletons_with_candidates": 1560,
+    "candidates_p50": 100.0,
+    "candidates_p95": 100.0,
+    "candidates_p99": 100.0,
+    "candidates_max": 100,
+    "reduction_ratio": 0.9999936750528247,
+    "pair_recall_by_source": {
+      "S2": 0.3330841820050453,
+      "S3": 0.30954771346819937
+    },
+    "mean_candidates_by_source": {
+      "S2": 32.63482654092287,
+      "S3": 32.64001347254968
+    },
+    "slices": {
+      "cardinality": {
+        "2-3": {
+          "s1_rows": 18249,
+          "oracle_ceiling_f05": 0.3936037294577489,
+          "pair_recall": 0.3217009916094584,
+          "full_coverage": 0.20899775330155076,
+          "mean_candidates": 65.38089758342923
+        },
+        "0": {
+          "s1_rows": 2418,
+          "oracle_ceiling_f05": 1.0,
+          "pair_recall": null,
+          "full_coverage": null,
+          "mean_candidates": 64.42018196856907
+        },
+        "6+": {
+          "s1_rows": 5193,
+          "oracle_ceiling_f05": 0.42736803647893096,
+          "pair_recall": 0.32098434004474274,
+          "full_coverage": 0.11554015020219527,
+          "mean_candidates": 65.75197381089929
+        },
+        "1": {
+          "s1_rows": 2409,
+          "oracle_ceiling_f05": 0.3287671232876712,
+          "pair_recall": 0.3287671232876712,
+          "full_coverage": 0.3287671232876712,
+          "mean_candidates": 64.2615193026152
+        },
+        "4-5": {
+          "s1_rows": 16266,
+          "oracle_ceiling_f05": 0.41704072998486286,
+          "pair_recall": 0.32018188177684503,
+          "full_coverage": 0.14754703061600885,
+          "mean_candidates": 65.28064674781753
+        }
+      },
+      "country": {
+        "India": {
+          "s1_rows": 17668,
+          "oracle_ceiling_f05": 0.5294178969537413,
+          "pair_recall": 0.4076736658913846,
+          "full_coverage": 0.2420857723091626,
+          "mean_candidates": 71.73715191306316
+        },
+        "US": {
+          "s1_rows": 26867,
+          "oracle_ceiling_f05": 0.3737680344982552,
+          "pair_recall": 0.26369708554369536,
+          "full_coverage": 0.14001970443349754,
+          "mean_candidates": 61.02516097815164
+        }
+      }
+    }
+  },
+  "eval_s": 2.5,
+  "run_id": "abl_b5_maxdf_0.0005__t1-auto-n4_v1__dev",
+  "config": {
+    "name": "abl_b5_maxdf_0.0005",
+    "subset": "dev",
+    "budgets": [
+      10,
+      20,
+      30,
+      50
+    ],
+    "norm": {
+      "learned": "configs/learned/n4_v1.json"
+    },
+    "channels": [
+      {
+        "id": "B5_name_addr",
+        "type": "sparse",
+        "k": 50,
+        "max_df": 0.0005,
+        "fields": [
+          {
+            "col": "name_core",
+            "ngram": [
+              3,
+              3
+            ]
+          },
+          {
+            "col": "addr_norm",
+            "ngram": [
+              3,
+              3
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "subset": "dev",
+  "norm_variant": "t1-auto-n4_v1",
+  "timings_s": {
+    "B5_name_addr": 12.7
+  },
+  "channel_stats": {
+    "B5_name_addr": {}
+  },
+  "peak_rss_gb": 11.2
+}

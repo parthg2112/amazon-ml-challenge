@@ -1,0 +1,474 @@
+{
+  "budgets": {
+    "10": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.9336202644081221,
+      "pair_recall": 0.8524756637883639,
+      "full_coverage": 0.6806752617707814,
+      "mean_candidates": 20.0,
+      "predict_all_f05": 0.17559255997638618,
+      "true_links": 154605,
+      "candidate_pairs": 890700,
+      "candidate_precision": 0.14797013584820928,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 2418,
+      "candidates_p50": 20.0,
+      "candidates_p95": 20.0,
+      "candidates_p99": 20.0,
+      "candidates_max": 20,
+      "reduction_ratio": 0.9999980620566289,
+      "pair_recall_by_source": {
+        "S2": 0.8658587045020755,
+        "S3": 0.839892575673912
+      },
+      "mean_candidates_by_source": {
+        "S2": 10.0,
+        "S3": 10.0
+      }
+    },
+    "20": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.9444408221382183,
+      "pair_recall": 0.8778047281782607,
+      "full_coverage": 0.7369470760025643,
+      "mean_candidates": 40.0,
+      "predict_all_f05": 0.09274477141571433,
+      "true_links": 154605,
+      "candidate_pairs": 1781400,
+      "candidate_precision": 0.0761833389468957,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 2418,
+      "candidates_p50": 40.0,
+      "candidates_p95": 40.0,
+      "candidates_p99": 40.0,
+      "candidates_max": 40,
+      "reduction_ratio": 0.9999961241132577,
+      "pair_recall_by_source": {
+        "S2": 0.8895503263437488,
+        "S3": 0.8667612067667286
+      },
+      "mean_candidates_by_source": {
+        "S2": 20.0,
+        "S3": 20.0
+      }
+    },
+    "30": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.9521131159495673,
+      "pair_recall": 0.892526114938068,
+      "full_coverage": 0.7657715411828953,
+      "mean_candidates": 60.0,
+      "predict_all_f05": 0.06341684923155315,
+      "true_links": 154605,
+      "candidate_pairs": 2672100,
+      "candidate_precision": 0.051640657161034394,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 2418,
+      "candidates_p50": 60.0,
+      "candidates_p95": 60.0,
+      "candidates_p99": 60.0,
+      "candidates_max": 60,
+      "reduction_ratio": 0.9999941861698866,
+      "pair_recall_by_source": {
+        "S2": 0.9046462273594853,
+        "S3": 0.8811304653380855
+      },
+      "mean_candidates_by_source": {
+        "S3": 30.0,
+        "S2": 30.0
+      }
+    },
+    "50": {
+      "s1_rows": 44535,
+      "oracle_ceiling_f05": 0.9693829583473951,
+      "pair_recall": 0.9257656608777206,
+      "full_coverage": 0.8229218605313768,
+      "mean_candidates": 100.0,
+      "predict_all_f05": 0.03974595871372409,
+      "true_links": 154605,
+      "candidate_pairs": 4453500,
+      "candidate_precision": 0.03213831817671494,
+      "singleton_rows": 2418,
+      "singletons_with_candidates": 2418,
+      "candidates_p50": 100.0,
+      "candidates_p95": 100.0,
+      "candidates_p99": 100.0,
+      "candidates_max": 100,
+      "reduction_ratio": 0.9999903102831442,
+      "pair_recall_by_source": {
+        "S2": 0.9355587885906488,
+        "S3": 0.9165579037196928
+      },
+      "mean_candidates_by_source": {
+        "S3": 50.0,
+        "S2": 50.0
+      },
+      "slices": {
+        "cardinality": {
+          "6+": {
+            "s1_rows": 5193,
+            "oracle_ceiling_f05": 0.9738720836716747,
+            "pair_recall": 0.9203877703206562,
+            "full_coverage": 0.738686693626035,
+            "mean_candidates": 100.0
+          },
+          "1": {
+            "s1_rows": 2409,
+            "oracle_ceiling_f05": 0.9286010792860108,
+            "pair_recall": 0.9286010792860108,
+            "full_coverage": 0.9286010792860108,
+            "mean_candidates": 100.0
+          },
+          "2-3": {
+            "s1_rows": 18249,
+            "oracle_ceiling_f05": 0.9661787789356423,
+            "pair_recall": 0.9282142554453767,
+            "full_coverage": 0.8556633240177544,
+            "mean_candidates": 100.0
+          },
+          "4-5": {
+            "s1_rows": 16266,
+            "oracle_ceiling_f05": 0.9730330617667339,
+            "pair_recall": 0.9265757257782441,
+            "full_coverage": 0.7974302225501045,
+            "mean_candidates": 100.0
+          },
+          "0": {
+            "s1_rows": 2418,
+            "oracle_ceiling_f05": 1.0,
+            "pair_recall": null,
+            "full_coverage": null,
+            "mean_candidates": 100.0
+          }
+        },
+        "country": {
+          "India": {
+            "s1_rows": 17668,
+            "oracle_ceiling_f05": 0.9477796281744691,
+            "pair_recall": 0.8788608233170144,
+            "full_coverage": 0.7281089475570421,
+            "mean_candidates": 100.0
+          },
+          "US": {
+            "s1_rows": 26867,
+            "oracle_ceiling_f05": 0.9835895179742702,
+            "pair_recall": 0.9567341766714632,
+            "full_coverage": 0.8854778325123153,
+            "mean_candidates": 100.0
+          }
+        }
+      }
+    }
+  },
+  "channels": {
+    "B1_house_token": {
+      "pair_recall": 0.6380453413537726,
+      "full_coverage": 0.3775672531281905,
+      "oracle_ceiling_f05": 0.7702005016781369,
+      "mean_candidates": 17.60803862130908,
+      "unique_links": 346,
+      "unique_link_share": 0.0022379612561042655
+    },
+    "B1_name_concat": {
+      "pair_recall": 0.5890301089874196,
+      "full_coverage": 0.22952726927368997,
+      "oracle_ceiling_f05": 0.789917706527736,
+      "mean_candidates": 35.69462220725272,
+      "unique_links": 87,
+      "unique_link_share": 0.0005627243620840206
+    },
+    "B1_name_fold": {
+      "pair_recall": 0.5651240257430226,
+      "full_coverage": 0.20694731343637962,
+      "oracle_ceiling_f05": 0.7720747256436418,
+      "mean_candidates": 39.39227573818345,
+      "unique_links": 128,
+      "unique_link_share": 0.0008279163028362601
+    },
+    "B1_name_sorted": {
+      "pair_recall": 0.5778791112835937,
+      "full_coverage": 0.21141106916447042,
+      "oracle_ceiling_f05": 0.7855717041132754,
+      "mean_candidates": 34.974918603345685,
+      "unique_links": 1,
+      "unique_link_share": 6.468096115908282e-06
+    },
+    "B2_name_word": {
+      "pair_recall": 0.6760777465153133,
+      "full_coverage": 0.3836693021820168,
+      "oracle_ceiling_f05": 0.8216344197178559,
+      "mean_candidates": 98.68813292915684,
+      "unique_links": 251,
+      "unique_link_share": 0.001623492125092979
+    },
+    "B3_name_char": {
+      "pair_recall": 0.6169205394392161,
+      "full_coverage": 0.3598072037419569,
+      "oracle_ceiling_f05": 0.7555112752808155,
+      "mean_candidates": 98.25979566632985,
+      "unique_links": 7,
+      "unique_link_share": 4.5276672811357976e-05
+    },
+    "B4_addr_char": {
+      "pair_recall": 0.8672423272209825,
+      "full_coverage": 0.6774224185008428,
+      "oracle_ceiling_f05": 0.9439740164892876,
+      "mean_candidates": 99.96631862579993,
+      "unique_links": 1323,
+      "unique_link_share": 0.008557291161346658
+    },
+    "B5_name_addr": {
+      "pair_recall": 0.9515604281879628,
+      "full_coverage": 0.8631194054657264,
+      "oracle_ceiling_f05": 0.9825042463272848,
+      "mean_candidates": 99.99775457505334,
+      "unique_links": 946,
+      "unique_link_share": 0.006118818925649235
+    }
+  },
+  "union": {
+    "s1_rows": 44535,
+    "oracle_ceiling_f05": 0.9963949267110699,
+    "pair_recall": 0.987730021668122,
+    "full_coverage": 0.9588289764228222,
+    "mean_candidates": 346.47147187605253,
+    "predict_all_f05": 0.012940001474517227,
+    "true_links": 154605,
+    "candidate_pairs": 15430107,
+    "candidate_precision": 0.009896755738634865,
+    "singleton_rows": 2418,
+    "singletons_with_candidates": 2418,
+    "candidates_p50": 333.0,
+    "candidates_p95": 505.0,
+    "candidates_p99": 638.0,
+    "candidates_max": 1097,
+    "reduction_ratio": 0.999966427895389,
+    "pair_recall_by_source": {
+      "S2": 0.989842634241401,
+      "S3": 0.9857436875658853
+    },
+    "mean_candidates_by_source": {
+      "S3": 172.96434265184686,
+      "S2": 173.50712922420567
+    },
+    "slices": {
+      "cardinality": {
+        "2-3": {
+          "s1_rows": 18249,
+          "oracle_ceiling_f05": 0.9963833634719709,
+          "pair_recall": 0.987965081786592,
+          "full_coverage": 0.9700805523590333,
+          "mean_candidates": 347.2976601457614
+        },
+        "4-5": {
+          "s1_rows": 16266,
+          "oracle_ceiling_f05": 0.9967781550128525,
+          "pair_recall": 0.9877719482336481,
+          "full_coverage": 0.9510635681790237,
+          "mean_candidates": 344.8176564613304
+        },
+        "1": {
+          "s1_rows": 2409,
+          "oracle_ceiling_f05": 0.9892071398920714,
+          "pair_recall": 0.9892071398920714,
+          "full_coverage": 0.9892071398920714,
+          "mean_candidates": 351.98256537982564
+        },
+        "6+": {
+          "s1_rows": 5193,
+          "oracle_ceiling_f05": 0.99689092848805,
+          "pair_recall": 0.9872035794183445,
+          "full_coverage": 0.9295205083766609,
+          "mean_candidates": 343.9732331985365
+        },
+        "0": {
+          "s1_rows": 2418,
+          "oracle_ceiling_f05": 1.0,
+          "pair_recall": null,
+          "full_coverage": null,
+          "mean_candidates": 351.23614557485524
+        }
+      },
+      "country": {
+        "India": {
+          "s1_rows": 17668,
+          "oracle_ceiling_f05": 0.9944431943257344,
+          "pair_recall": 0.9805474684059008,
+          "full_coverage": 0.9361486082905268,
+          "mean_candidates": 368.6391781752321
+        },
+        "US": {
+          "s1_rows": 26867,
+          "oracle_ceiling_f05": 0.9976784048732805,
+          "pair_recall": 0.9924722407164794,
+          "full_coverage": 0.9737931034482759,
+          "mean_candidates": 331.8937730301113
+        }
+      }
+    }
+  },
+  "run_id": "all_v1__t1-auto-n4_v1__dev",
+  "config": {
+    "name": "all_v1",
+    "subset": "dev",
+    "budgets": [
+      10,
+      20,
+      30,
+      50
+    ],
+    "norm": {
+      "translit": true,
+      "profile_mode": "auto",
+      "learned": "configs/learned/n4_v1.json"
+    },
+    "channels": [
+      {
+        "id": "B1_name_sorted",
+        "type": "exact",
+        "query_col": "name_sorted"
+      },
+      {
+        "id": "B1_name_concat",
+        "type": "exact",
+        "query_col": "name_concat"
+      },
+      {
+        "id": "B1_name_fold",
+        "type": "exact",
+        "query_col": "name_fold"
+      },
+      {
+        "id": "B1_house_token",
+        "type": "house_token",
+        "rarest": 2
+      },
+      {
+        "id": "B2_name_word",
+        "type": "sparse",
+        "k": 50,
+        "fields": [
+          {
+            "col": "name_core",
+            "analyzer": "word",
+            "ngram": [
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "id": "B3_name_char",
+        "type": "sparse",
+        "k": 50,
+        "fields": [
+          {
+            "col": "name_core",
+            "ngram": [
+              3,
+              3
+            ]
+          }
+        ]
+      },
+      {
+        "id": "B4_addr_char",
+        "type": "sparse",
+        "k": 50,
+        "fields": [
+          {
+            "col": "addr_norm",
+            "ngram": [
+              3,
+              3
+            ]
+          }
+        ]
+      },
+      {
+        "id": "B5_name_addr",
+        "type": "sparse",
+        "k": 50,
+        "fields": [
+          {
+            "col": "name_core",
+            "ngram": [
+              3,
+              3
+            ],
+            "weight": 1.0
+          },
+          {
+            "col": "addr_norm",
+            "ngram": [
+              3,
+              3
+            ],
+            "weight": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "subset": "dev",
+  "norm_variant": "t1-auto-n4_v1",
+  "timings_s": {
+    "B1_name_sorted": 1.3,
+    "B1_name_concat": 1.7,
+    "B1_name_fold": 1.2,
+    "B1_house_token": 11.1,
+    "B2_name_word": 20.9,
+    "B3_name_char": 124.7,
+    "B4_addr_char": 246.4,
+    "B5_name_addr": 402.4
+  },
+  "eval_s": 13.1,
+  "channel_stats": {
+    "B1_name_sorted": {
+      "S2": {
+        "query_keys": 44535,
+        "keys_over_cap": 1601
+      },
+      "S3": {
+        "query_keys": 44535,
+        "keys_over_cap": 1642
+      }
+    },
+    "B1_name_concat": {
+      "S2": {
+        "query_keys": 44535,
+        "keys_over_cap": 1591
+      },
+      "S3": {
+        "query_keys": 44535,
+        "keys_over_cap": 1639
+      }
+    },
+    "B1_name_fold": {
+      "S2": {
+        "query_keys": 44535,
+        "keys_over_cap": 2077
+      },
+      "S3": {
+        "query_keys": 44535,
+        "keys_over_cap": 2133
+      }
+    },
+    "B1_house_token": {
+      "S2": {
+        "query_keys": 77747,
+        "keys_over_cap": 651
+      },
+      "S3": {
+        "query_keys": 77747,
+        "keys_over_cap": 703
+      }
+    },
+    "B2_name_word": {},
+    "B3_name_char": {},
+    "B4_addr_char": {},
+    "B5_name_addr": {}
+  },
+  "peak_rss_gb": 13.5
+}

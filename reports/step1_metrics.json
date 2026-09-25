@@ -1,0 +1,88 @@
+{
+   "f05_row_formula" : "1.25 * TP / (predicted_count + 0.25 * true_count), with empty/empty defined as 1",
+   "metric" : "macro F0.5 per S1; singleton empty/empty = 1",
+   "scorer_hand_checks" : "PASS: six boundary and partial-match cases",
+   "split" : {
+      "entity_counts_by_country" : {
+         "India" : {
+            "train" : 706204,
+            "validation" : 176984
+         },
+         "US" : {
+            "train" : 1058384,
+            "validation" : 265249
+         }
+      },
+      "method" : "stable SHA-256 hash of seed and S1 ID; hash bucket 0-19 is validation",
+      "seed" : "er-v1-2026-09-25",
+      "validation_fraction" : 0.2
+   },
+   "training_data" : {
+      "ground_truth_rows" : 2206821,
+      "match_cardinality" : {
+         "0" : 123247,
+         "1" : 119157,
+         "10" : 534,
+         "11" : 37,
+         "2" : 375212,
+         "3" : 530841,
+         "4" : 484115,
+         "5" : 321957,
+         "6" : 164868,
+         "7" : 63968,
+         "8" : 18680,
+         "9" : 4205
+      },
+      "s1_entities" : 2206821
+   },
+   "validation" : {
+      "all_empty_prediction_macro_f05" : 0.0558664776260478,
+      "match_cardinality" : {
+         "0" : 24706,
+         "1" : 23743,
+         "10" : 100,
+         "11" : 7,
+         "2" : 75132,
+         "3" : 106148,
+         "4" : 97267,
+         "5" : 64706,
+         "6" : 32991,
+         "7" : 12909,
+         "8" : 3709,
+         "9" : 815
+      },
+      "match_cardinality_by_country" : {
+         "India" : {
+            "0" : 9813,
+            "1" : 9445,
+            "10" : 40,
+            "11" : 6,
+            "2" : 30054,
+            "3" : 42165,
+            "4" : 39134,
+            "5" : 26110,
+            "6" : 13219,
+            "7" : 5205,
+            "8" : 1461,
+            "9" : 332
+         },
+         "US" : {
+            "0" : 14893,
+            "1" : 14298,
+            "10" : 60,
+            "11" : 1,
+            "2" : 45078,
+            "3" : 63983,
+            "4" : 58133,
+            "5" : 38596,
+            "6" : 19772,
+            "7" : 7704,
+            "8" : 2248,
+            "9" : 483
+         }
+      },
+      "s1_entities" : 442233,
+      "singleton_entities" : 24706,
+      "true_links" : 1531442
+   }
+}

@@ -1,0 +1,12 @@
+# Ablation: GPU dense multilingual retrieval alone (raw text, no normalization dependence).
+name = "abl_b7_dense"
+subset = "dev"
+budgets = [10, 20, 30, 50]
+
+[norm]
+learned = "configs/learned/n4_v1.json"
+
+[[channels]]
+id = "B7_dense"
+type = "dense"
+k = 50

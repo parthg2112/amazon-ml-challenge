@@ -1,0 +1,32 @@
+{
+  "seed": "er-v1-2026-09-25",
+  "validation_s1": 442233,
+  "dev_s1": 44535,
+  "entity_counts": {
+    "India/train": 706204,
+    "India/validation": 176984,
+    "US/train": 1058384,
+    "US/validation": 265249
+  },
+  "validation_cardinality": {
+    "0": 24706,
+    "1": 23743,
+    "2": 75132,
+    "3": 106148,
+    "4": 97267,
+    "5": 64706,
+    "6": 32991,
+    "7": 12909,
+    "8": 3709,
+    "9": 815,
+    "10": 100,
+    "11": 7
+  },
+  "all_empty_macro_f05": 0.05586647762604781,
+  "parity_with_perl": {
+    "validation_s1": true,
+    "all_empty": true,
+    "cardinality": true,
+    "country_counts": true
+  }
+}

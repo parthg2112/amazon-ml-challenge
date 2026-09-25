@@ -1,0 +1,47 @@
+# Leave-profile-out: v2 channels with GENERIC profile for all countries (France lower bound).
+name = "v2_generic"
+subset = "dev"
+budgets = [5, 10, 15, 20, 30, 50]
+
+[norm]
+learned = "configs/learned/n4_v1.json"
+profile_mode = "generic"
+
+[ranker]
+enabled = false
+train_subset = "rtrain"
+
+[[channels]]
+id = "B1_name_concat"
+type = "exact"
+query_col = "name_concat"
+
+[[channels]]
+id = "B1_name_fold"
+type = "exact"
+query_col = "name_fold"
+
+[[channels]]
+id = "B1_house_token"
+type = "house_token"
+rarest = 2
+
+[[channels]]
+id = "B2_name_word"
+type = "sparse"
+k = 50
+fields = [{ col = "name_core", analyzer = "word", ngram = [1, 1] }]
+
+[[channels]]
+id = "B4_addr_char"
+type = "sparse"
+k = 50
+partition = "addr_region"
+fields = [{ col = "addr_norm", ngram = [3, 3] }]
+
+[[channels]]
+id = "B5_name_addr"
+type = "sparse"
+k = 50
+partition = "addr_region"
+fields = [{ col = "name_core", ngram = [3, 3] }, { col = "addr_norm", ngram = [3, 3] }]

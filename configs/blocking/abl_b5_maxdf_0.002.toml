@@ -1,0 +1,14 @@
+# Ablation: B5 cost/recall vs common-gram pruning.
+name = "abl_b5_maxdf_0.002"
+subset = "dev"
+budgets = [10, 20, 30, 50]
+
+[norm]
+learned = "configs/learned/n4_v1.json"
+
+[[channels]]
+id = "B5_name_addr"
+type = "sparse"
+k = 50
+max_df = 0.002
+fields = [{ col = "name_core", ngram = [3, 3] }, { col = "addr_norm", ngram = [3, 3] }]

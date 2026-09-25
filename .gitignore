@@ -1,0 +1,34 @@
+# Challenge data (~2.5 GB) stays local.
+student_resource/dataset/
+data/
+
+# Generated: parquet caches, hashed matrices, embeddings, candidates, submissions.
+artifacts/
+output/
+*.parquet
+*.npy
+*.npz
+*.sqlite
+*.sqlite3
+*.db
+*.log
+candidate_pairs.tsv
+matching_results.tsv
+
+# Python tooling.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.cache/
+.huggingface/
+
+# OS / archive leftovers.
+.DS_Store
+**/.DS_Store
+__MACOSX/
+**/__MACOSX/
+*.swp
+*.tmp

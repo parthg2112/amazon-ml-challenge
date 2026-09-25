@@ -1,0 +1,14 @@
+# Ablation: B5 searched within canonical region (+ unknown-region targets).
+name = "abl_b5_region"
+subset = "dev"
+budgets = [10, 20, 30, 50]
+
+[norm]
+learned = "configs/learned/n4_v1.json"
+
+[[channels]]
+id = "B5_name_addr_region"
+type = "sparse"
+k = 50
+partition = "addr_region"
+fields = [{ col = "name_core", ngram = [3, 3] }, { col = "addr_norm", ngram = [3, 3] }]
