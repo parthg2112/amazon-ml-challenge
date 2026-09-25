@@ -68,7 +68,7 @@ def country_transfer(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: p
 
 
 def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False, scope: str = "val",
-        backend: str = "xgb_gpu") -> dict:
+        backend: str = "xgb_gpu", relative: bool = True) -> dict:
     t0 = time.perf_counter()
     uni = Universe(config_path, "train", k, scope)
     uni.shortlists()
@@ -77,6 +77,9 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
     y = ranker.label(df, truth)
     df = df.join(load_split().select("s1_id", "cv_fold"), on="s1_id", how="left")
     feats = features.NUMERIC_FEATURES + uni.extra_features()
+    if relative:
+        df = features.add_relative(df)
+        feats = feats + features.REL_FEATURES
     print(f"val pairs {df.height:,}, pos rate {y.mean():.4f}, {len(feats)} features", flush=True)
 
     t_cv = time.perf_counter()
@@ -132,6 +135,8 @@ def submit(name: str = "v2", parts: int | None = None) -> dict:
     frames = []
     for i in range(len(uni.chunks)):
         df = uni.features(i, None, gctx)
+        if features.REL_FEATURES[0] in feats:
+            df = features.add_relative(df)
         frames.append(df.select("s1_id", "target_id", "src").with_columns(
             pl.Series("p", _score(block, train.matrix(df, feats)))))
         del df

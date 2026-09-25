@@ -1,3 +1,4 @@
+import pytest
 import polars as pl
 
 from er.match.features import CATEGORICAL_FEATURES, JOIN_COLS, NUMERIC_FEATURES, build
@@ -116,3 +117,14 @@ def test_noise_flags():
     assert r1["house_digit_dropped"] == 1 and r1["house_digit_changed"] == 0
     assert r1["name_min_exact"] == 1 and r1["name_noise_only_diff"] == 1
     assert r2["house_digit_changed"] == 1 and r2["house_digit_dropped"] == 0
+
+
+def test_add_relative_gaps_zero_at_best():
+    from er.match.features import REL_BASE, add_relative
+
+    df = pl.DataFrame({"s1_id": ["a", "a", "b"], "src": ["S2", "S3", "S2"]}).with_columns(
+        [pl.Series(c, [0.9, 0.4, 0.5]) for c in REL_BASE])
+    out = add_relative(df)
+    assert out["gap_p"].to_list() == pytest.approx([0.0, 0.5, 0.0])
+    assert out["gapsrc_p"].to_list() == [0.0, 0.0, 0.0]
+    assert out["z_p"][2] == 0.0

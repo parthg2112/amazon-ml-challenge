@@ -93,6 +93,23 @@ def _legal_relation() -> pl.Expr:
 CTX_SCORE = "_ctx_score"  # (name token-set + address token-set) / 2: the score competitors are compared on
 
 
+REL_BASE = ["p", "dense_cos", "sim_full_tset", "sim_min_tset", "sim_name_tset", "sim_addr_tset", "sim_name_char3",
+            "sim_addr_char3", "name_tok_overlap_idf", "addr_num_jaccard"]
+REL_FEATURES = [f"{k}_{c}" for c in REL_BASE for k in ("gap", "gapsrc", "z")]
+
+
+def add_relative(df: pl.DataFrame) -> pl.DataFrame:
+    """Scores relative to the S1's own shortlist; transfer better to unseen countries
+    (reports/match/v2_relative_features.json). Needs complete per-S1 shortlists in `df`."""
+    exprs = []
+    for c in REL_BASE:
+        exprs += [(pl.col(c).max().over("s1_id") - pl.col(c)).alias(f"gap_{c}"),
+                  (pl.col(c).max().over("s1_id", "src") - pl.col(c)).alias(f"gapsrc_{c}"),
+                  ((pl.col(c) - pl.col(c).mean().over("s1_id")) / (pl.col(c).std().over("s1_id") + 1e-6))
+                  .fill_null(0.0).alias(f"z_{c}")]
+    return df.with_columns(exprs)
+
+
 def add_local_context(df: pl.DataFrame, score_col: str = CTX_SCORE) -> pl.DataFrame:
     """Rank/count/support within the S1's own candidate set: needs only that S1's rows."""
     df = df.with_columns(
