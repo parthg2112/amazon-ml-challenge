@@ -43,11 +43,27 @@ def _learned(path: str | None) -> tuple[dict[str, str], dict[str, str]]:
     return d.get("name_tokens", {}), d.get("regions", {})
 
 
+@lru_cache(maxsize=1)
+def s1_name_vocab() -> frozenset[str]:
+    """Tokens of clean train-S1 names (count ≥ 2): guards N5 fuzzy legal matching against real words."""
+    path = io.ARTIFACTS / "cache" / "s1_name_vocab.txt"
+    if not path.exists():
+        from collections import Counter
+
+        from er.normalize.text import base_text, tokens
+
+        counts = Counter(t for n in io.load_source("train", "S1")["business_name"].to_list()
+                         for t in tokens(base_text(n)))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(sorted(t for t, c in counts.items() if c >= 2)), encoding="utf-8")
+    return frozenset(path.read_text(encoding="utf-8").split("\n"))
+
+
 def normalize_record(name: str | None, address: str | None, country: str | None, cfg: NormConfig) -> dict:
     prof = profile_for(country, cfg.profile_mode)
     token_map, region_map = _learned(cfg.learned)
     rec = {"profile": prof.name, "name_native": is_native_script(name)}
-    rec.update(normalize_name(name, prof, cfg.translit, token_map or None))
+    rec.update(normalize_name(name, prof, cfg.translit, token_map or None, s1_name_vocab()))
     rec.update(normalize_address(address, prof, cfg.translit, region_map or None))
     return rec
 
@@ -59,6 +75,7 @@ SCHEMA = {
     "addr_content": pl.Utf8, "addr_region": pl.Utf8, "addr_house": pl.Utf8,
     "addr_numbers": pl.List(pl.Utf8), "addr_postal": pl.Utf8, "addr_city": pl.Utf8,
     "addr_unit": pl.Utf8, "addr_landmark": pl.Utf8, "addr_empty": pl.Boolean,
+    "name_min": pl.Utf8, "name_min_key": pl.Utf8,
 }
 
 

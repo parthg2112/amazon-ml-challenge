@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dense = ["torch>=2.7", "sentence-transformers>=3.3"]
+dense = ["torch>=2.7", "sentence-transformers>=3.3", "datasets>=3.0", "accelerate>=1.0"]
 
 [project.scripts]
 er = "er.cli:main"

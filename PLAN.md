@@ -96,6 +96,20 @@ Other findings:
 
 Chosen shortlist: **v3_pc20, K=10 per source (20 candidates per S1)**: 98.87% pair recall, 96.1% full coverage, 0.9966 oracle F0.5 on full validation. It is above the 95% recall target, and Step 4 then scores 35M test pairs instead of 670M. The remaining India gap (95.9% vs US 99.0% recall at K=50) comes mostly from native-script and name-replaced targets.
 
+### Deep dives, round 2 (dev unless noted)
+
+| # | Item | Finding | Decision |
+|---|---|---|---|
+| 1 | Memory across chunks | Flat ~35 GB commit per chunk (one-time caches; B7 GPU memory is mirrored in Windows commit). No leak. | chunk 25k, float32 features |
+| 2 | Miss taxonomy (`--save-misses`) | 1.10% of links lost at K=10: 53% empty-address targets with generic typo'd names, 19% name replaced, 10% native script; 54% were retrieved but ranked out | fix ranking first |
+| 2b | B8 name-only search over empty-address targets | +9 of 496 unretrieved links; ranker@10 −0.0003 | **rejected** |
+| 3 | N4 address tokens | only ~3% of India addresses have native script outside the state (already handled) | deprioritized |
+| 4a | Ranker trained on 10% of train fold (5×), 20% negatives | ranker@10 0.99691 → 0.99760 | kept |
+| 4b | + LightGBM lambdarank per (S1, source) | ranker@10 **0.99773**, recall 99.20%, full coverage 97.2% | kept (`b_v6b_lgbrank.toml`); scores are not probabilities, retrain Step 4 on them |
+| 6 | Noise-operation catalogue (`reports/noise/`) | inserted words 48%/29% (India/US), legal changed 50%/28%, typos 12%/6%, name replaced 14%/8%, honorifics, homoglyphs (`c0m`, `5ervices`), alias phrases, `PO Box`/`null` | → N5 |
+| 6b | **N5 `name_min` view** (additive): generator noise stripped; fuzzy legal variants guarded by the clean-S1 vocabulary (`prabhat` kept, `piraivet` removed) | exact name-key agreement on val true pairs **61.3% → 67.7%**; native-script 78.3% → 90.2% | kept; blocking test v7a/v7b pending |
+| 5 | Dense fine-tune (`er finetune`) | MNRL on 600k train-fold pairs, excluding val and the ranker's `rtrain10` sample | running |
+
 ## 6. Test-set path
 
 `uv run er infer configs/blocking/b_v3_pc20.toml --k 10` trains the ranker on train and blocks all 1.73M test S1 against the test S2/S3 pools, France included. It writes `output/candidate_pairs.tsv` and a placeholder all-empty `output/matching_results.tsv`, which `student_resource/utils/validate_submission.py` accepts. TEST_RESULTS

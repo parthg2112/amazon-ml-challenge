@@ -7,7 +7,7 @@ import polars as pl
 from er import io
 from er.normalize.pipeline import NormConfig, load_norm
 
-KEYS = ["name_full", "name_core", "name_sorted", "name_concat", "name_fold", "addr_content"]
+KEYS = ["name_full", "name_core", "name_sorted", "name_concat", "name_fold", "name_min_key", "addr_content"]
 TRISTATE = ["addr_house", "addr_region", "addr_postal"]
 
 

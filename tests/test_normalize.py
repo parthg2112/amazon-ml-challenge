@@ -93,3 +93,16 @@ def test_native_translit_fold():
     assert fold_token("consultants") == fold_token("kmsltemts")
     assert fold_token("vijay") == fold_token("bijy")
     assert fold_token("private") == fold_token("praivet")
+
+
+def test_name_min_strips_generator_noise():
+    k = lambda n, c="US": rec(n, country=c)["name_min_key"]  # noqa: E731
+    assert k("Behavioral Health Pártners Pártners LLC Foundation") == k("Behavioral Health Partners LLC")
+    assert k("Internal Medicine Physícians Council") == k("Internal Medicine Physicians")
+    assert k("Deltabelo Co doing business as Varsha Healthcare Limited") == "deltabelo healthcare varsha"
+    assert k("C0rp Harbor 5ervices LLCLLC") == "harbor"
+    assert k("Shri Mnf & Co", "India") == k("Mnf Co", "India")
+    for v in ("Qss Farmers Piraivet Limitet", "Qss Farmers Praibhet Ltd", "Qss Farmers Private Limited"):
+        assert k(v, "India") == "farmers qss", v
+    # existing views are untouched
+    assert rec("Behavioral Health Partners Foundation")["name_core"] == "behavioral health partners foundation"
