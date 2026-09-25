@@ -103,7 +103,11 @@ Chosen shortlist: **v3_pc20, K=10 per source (20 candidates per S1)**: 98.87% pa
 | 4b | + LightGBM lambdarank per (S1, source) | ranker@10 **0.99773**, recall 99.20%, full coverage 97.2% | kept (`b_v6b_lgbrank.toml`); scores are not probabilities, retrain Step 4 on them |
 | 6 | Noise-operation catalogue (`reports/noise/`) | inserted words 48%/29% (India/US), legal changed 50%/28%, typos 12%/6%, name replaced 14%/8%, honorifics, homoglyphs (`c0m`, `5ervices`), alias phrases, `PO Box`/`null` | → N5 |
 | 6b | **N5 `name_min` view** (additive): generator noise stripped; fuzzy legal variants guarded by the clean-S1 vocabulary (`prabhat` kept, `piraivet` removed) | exact name-key agreement on val true pairs **61.3% → 67.7%**; native-script 78.3% → 90.2% | kept; blocking test v7a/v7b pending |
-| 5 | Dense fine-tune (`er finetune`) | MNRL on 600k train-fold pairs, excluding val and the ranker's `rtrain10` sample | running |
+| 5 | Dense fine-tune (`er finetune`) | MNRL on 600k train-fold pairs (excl. val and the ranker's `rtrain10`); B7 recall 97.49% → 99.86%, B7 full coverage 91.7% → 99.5% | **kept** |
+| 7 | v7a/v7b N5 in blocking (exact `name_min_key`; `name_min` in B5) | ranker@10 0.99773 → 0.99817 (India recall +0.26 pp) | kept |
+| 8 | Channel-output cache (`artifacts/cache/channels/`) | identical metrics, dev run 504 s → 188 s | kept |
+
+**v9 = v7b + fine-tuned dense, full validation (442k S1):** ranker@10 oracle **0.99937** (v3_pc20: 0.99658), pair recall 99.78%, full coverage 99.2%, India 99.77% / US 99.78%. Blocking now costs ~0.06 pp of F0.5.
 
 ## 6. Test-set path
 
