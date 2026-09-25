@@ -95,15 +95,35 @@ def _matrix(df: pl.DataFrame, features: list[str]) -> np.ndarray:
     return df.select(pl.col(features).cast(pl.Float32)).to_numpy()
 
 
+def fit_matrix(X: np.ndarray, y: np.ndarray, kind: str = "hgb", groups: np.ndarray | None = None):
+    """kind: hgb (binary, sklearn) | lgbm_rank (lambdarank over (s1, source) groups; X sorted by group)."""
+    if kind == "hgb":
+        model = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.1, max_leaf_nodes=63,
+                                               early_stopping=True, validation_fraction=0.1, random_state=0)
+        return model.fit(X, y)
+    if kind == "lgbm_rank":
+        import lightgbm as lgb
+
+        _, sizes = np.unique(groups, return_counts=True)  # groups are contiguous run ids
+        model = lgb.LGBMRanker(objective="lambdarank", n_estimators=400, learning_rate=0.05, num_leaves=63,
+                               min_child_samples=50, lambdarank_truncation_level=20, eval_at=[10],
+                               n_jobs=io.THREADS, random_state=0, verbose=-1)
+        return model.fit(X, y, group=sizes)
+    raise ValueError(kind)
+
+
+def score(model, X: np.ndarray) -> np.ndarray:
+    if hasattr(model, "predict_proba"):
+        return model.predict_proba(X)[:, 1]
+    return model.predict(X)
+
+
 def fit(df: pl.DataFrame, y: np.ndarray, features: list[str]) -> HistGradientBoostingClassifier:
-    model = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.1, max_leaf_nodes=63,
-                                           early_stopping=True, validation_fraction=0.1, random_state=0)
-    model.fit(_matrix(df, features), y)
-    return model
+    return fit_matrix(_matrix(df, features), y)
 
 
 def rank_by_model(df: pl.DataFrame, model: HistGradientBoostingClassifier, features: list[str]) -> pl.DataFrame:
-    p = model.predict_proba(_matrix(df, features))[:, 1]
+    p = score(model, _matrix(df, features))
     return df.select("s1_id", "target_id", "src").with_columns(pl.Series("p", p.astype(np.float32))).with_columns(
         pl.col("p").rank("ordinal", descending=True).over("s1_id", "src").cast(pl.Int32).alias("frank")
     )

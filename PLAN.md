@@ -75,6 +75,10 @@ Other findings:
 - **Partitioning B7 dense is rejected** (−0.43 pp B7 recall); partitioning B2 raised B2's own recall 67.6% → 79.4% but lowered ranker@10 on dev, so B2 stays global.
 - **Speed:** targets are built once per process (pre-transposed region blocks, exact/house tables, GPU-resident embeddings); candidates are identical to before. Full validation 31 min → 16 min; all parallel work capped at 11 threads (`ER_THREADS`).
 
+- **Ranker pre-cut (v3_pc20) is kept.** Only pairs ranked ≤20 by at least one channel get ranker features. On full validation ranker@10 rises 0.99603 → **0.99658** (recall 98.69% → 98.87%) and ranker time halves: the long tail was noise for the ranker.
+- **Partitioning B7 dense is rejected** (−0.43 pp B7 recall); partitioning B2 raised B2's own recall 67.6% → 79.4% but lowered ranker@10 on dev, so B2 stays global.
+- **Speed:** targets are built once per process (pre-transposed region blocks, exact/house tables, GPU-resident embeddings); candidates are identical to before. Full validation 31 min → 16 min; all parallel work capped at 11 threads (`ER_THREADS`).
+
 - **Region partitioning** is the country-aware speed lever. Each query searches only targets in its canonical region plus targets with unknown region. B5 went from 402 s to 27 s on dev (15×) with identical recall (95.18% vs 95.16%) and higher full coverage.
 - **Global n-gram pruning is rejected.** `max_df=0.002` cut B5 recall from 95% to 76%.
 - **RRF fusion is rejected.** At K=50 per source it scored below the best single channel (0.969 vs 0.981).

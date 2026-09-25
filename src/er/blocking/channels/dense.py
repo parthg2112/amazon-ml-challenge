@@ -20,20 +20,20 @@ def _texts(df: pl.DataFrame) -> list[str]:
     ).to_series().to_list()
 
 
-def embed_source(split: str, src: str, batch: int = 1024, force: bool = False) -> np.ndarray:
-    """Embeds raw text (the model handles scripts/accents itself); cached as float16 .npy."""
-    path = io.ARTIFACTS / "cache" / "dense" / f"{MODEL.split('/')[-1]}_{split}_{src}.npy"
+def embed_source(split: str, src: str, batch: int = 1024, force: bool = False, model: str = MODEL) -> np.ndarray:
+    """Embeds raw text (the model handles scripts/accents itself); cached as float16 .npy per model."""
+    path = io.ARTIFACTS / "cache" / "dense" / f"{model.replace(chr(92), '/').rstrip('/').split('/')[-1]}_{split}_{src}.npy"
     if path.exists() and not force:
         return np.load(path, mmap_mode="r")
     import torch
     from sentence_transformers import SentenceTransformer
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    model = SentenceTransformer(MODEL, device="cuda", model_kwargs={"torch_dtype": torch.float16})
-    model.max_seq_length = 64
+    enc = SentenceTransformer(model, device="cuda", model_kwargs={"torch_dtype": torch.float16})
+    enc.max_seq_length = 64
     texts = _texts(io.load_source(split, src))
     t0 = time.perf_counter()
-    emb = model.encode(texts, batch_size=batch, normalize_embeddings=True, convert_to_numpy=True,
+    emb = enc.encode(texts, batch_size=batch, normalize_embeddings=True, convert_to_numpy=True,
                        show_progress_bar=True).astype(np.float16)
     np.save(path, emb)
     print(f"embedded {split}_{src}: {len(texts):,} in {time.perf_counter() - t0:.0f}s")
@@ -43,17 +43,17 @@ def embed_source(split: str, src: str, batch: int = 1024, force: bool = False) -
 _GPU: dict[tuple, object] = {}  # (split, src) → (resident fp16 targets, block slices)
 
 
-def _resident(split: str, src: str, tkey: np.ndarray | None):
+def _resident(split: str, src: str, tkey: np.ndarray | None, model: str = MODEL):
     """One split's target embeddings on the GPU (≈7.6 GB for S2+S3), rows sorted by partition key so every
     block is a zero-copy slice. The other split is evicted first."""
     import torch
 
-    key = (split, src, tkey is not None)
+    key = (split, src, tkey is not None, model)
     if key not in _GPU:
         for k in [k for k in _GPU if k[0] != split or k[1] == src]:
             del _GPU[k]
         torch.cuda.empty_cache()
-        emb = embed_source(split, src)
+        emb = embed_source(split, src, model=model)
         if tkey is None:
             order, blocks = np.arange(len(emb)), {"*": (0, len(emb))}
         else:
@@ -79,7 +79,7 @@ def _topk(q, t, k: int, qbatch: int):
 
 def dense_channel(queries: pl.DataFrame, targets: dict[str, pl.DataFrame], k: int,
                   query_rows: np.ndarray, split: str = "train", partition: str | None = None,
-                  qbatch: int = 256) -> pl.DataFrame:
+                  qbatch: int = 256, model: str = MODEL) -> pl.DataFrame:
     """query_rows: row positions of `queries` within the full S1 parquet (to index cached embeddings).
 
     partition: keyed query r searches target blocks {r, unknown}; unkeyed queries search all targets.
@@ -87,14 +87,14 @@ def dense_channel(queries: pl.DataFrame, targets: dict[str, pl.DataFrame], k: in
     import torch
 
     order_q = np.argsort(query_rows, kind="stable")
-    q_all = torch.from_numpy(np.ascontiguousarray(embed_source(split, "S1")[query_rows[order_q]])).cuda()
+    q_all = torch.from_numpy(np.ascontiguousarray(embed_source(split, "S1", model=model)[query_rows[order_q]])).cuda()
     qids = queries["entity_id"].gather(order_q)
     qkey = queries[partition].fill_null("").to_numpy().astype(str)[order_q] if partition else None
     out = []
     with torch.inference_mode():
         for src, tdf in targets.items():
             tkey = tdf[partition].fill_null("").to_numpy().astype(str) if partition else None
-            t, t_order, blocks = _resident(split, src, tkey)
+            t, t_order, blocks = _resident(split, src, tkey, model)
             tids = tdf["entity_id"].gather(t_order)
             groups = [(np.arange(len(qids)), [(0, t.shape[0])])] if qkey is None else []
             if qkey is not None:

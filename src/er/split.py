@@ -46,9 +46,14 @@ def load_split() -> pl.DataFrame:
 
 
 def subset_ids(split_df: pl.DataFrame, subset: str) -> pl.Series:
-    """subset: train | rtrain (2% ranker sample of train fold) | dev (10% of validation) | val (20% holdout)."""
+    """subset: train | rtrain (2% ranker sample of train fold) | rtrain<N> (N% of train fold, ⊇ rtrain)
+    | dev (10% of validation) | val (20% holdout)."""
     if subset == "rtrain":
         return split_df.filter(~pl.col("is_val") & pl.col("is_rtrain"))["s1_id"]
+    if subset.startswith("rtrain"):
+        bp = int(subset[6:]) * 100
+        ids = split_df.filter(~pl.col("is_val"))["s1_id"].to_list()
+        return pl.Series("s1_id", [i for i in ids if stable_bucket(i, SEED, "ranker", 10_000) < bp])
     if subset == "train":
         return split_df.filter(~pl.col("is_val"))["s1_id"]
     if subset == "dev":

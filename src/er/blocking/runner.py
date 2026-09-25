@@ -16,6 +16,7 @@ import polars as pl
 import psutil
 
 from er import io
+from er.blocking.channels.dense import MODEL
 from er.blocking.channels.exact import exact_channel, house_token_keys, token_df
 from er.blocking.channels.sparse import FieldSpec, sparse_channel
 from er.blocking.fuse import add_ranks, fuse
@@ -26,6 +27,7 @@ from er.split import load_split, subset_ids
 EXPERIMENTS = io.REPORTS / "experiments"
 _HOUSE_DF: dict[tuple, pl.DataFrame] = {}  # target-side tables never change within a process
 _HOUSE_TK: dict[tuple, pl.DataFrame] = {}
+_FILTERED: dict[tuple, dict[str, pl.DataFrame]] = {}
 CHUNK = 25_000
 
 
@@ -61,14 +63,21 @@ def run_channel(ch: dict, queries: pl.DataFrame, targets: dict[str, pl.DataFrame
         fields = [FieldSpec(col=f["col"], analyzer=f.get("analyzer", "char_wb"),
                             ngram=tuple(f.get("ngram", (3, 3))), weight=f.get("weight", 1.0))
                   for f in ch["fields"]]
+        cache_variant = variant if split == "train" else f"{split}-{variant}"
+        if ch.get("target_filter"):  # boolean column: search only that target subset (own IDF + cache)
+            col = ch["target_filter"]
+            fk = (split, variant, col)
+            if fk not in _FILTERED:
+                _FILTERED[fk] = {src: t.filter(pl.col(col)) for src, t in targets.items()}
+            targets = _FILTERED[fk]
+            cache_variant += f"~{col}"
         df = sparse_channel(queries, targets, fields, ch.get("k", 50), ch.get("max_df", 0.01),
-                            ch.get("threshold", 0.0), variant if split == "train" else f"{split}-{variant}",
-                            ch.get("partition"))
+                            ch.get("threshold", 0.0), cache_variant, ch.get("partition"))
     elif kind == "dense":
         from er.blocking.channels.dense import dense_channel
 
         df = dense_channel(queries, targets, ch.get("k", 50), queries["row"].to_numpy(), split,
-                           ch.get("partition"))
+                           ch.get("partition"), model=ch.get("model", MODEL))
     else:
         raise ValueError(kind)
     return add_ranks(df).with_columns(pl.lit(ch["id"]).alias("channel")), stats
@@ -85,7 +94,7 @@ class Context:
         cols = {"entity_id", "country", *PAIR_COLS}
         for ch in cfg["channels"]:
             cols |= {ch.get("query_col"), ch.get("target_col"), ch.get("partition")}
-            cols |= {f["col"] for f in ch.get("fields", [])}
+            cols |= {f["col"] for f in ch.get("fields", [])} | {ch.get("target_filter")}
         cols = [c for c in cols if c]
         self.s1 = load_norm(split, "S1", self.norm).select(cols).with_row_index("row")
         self.targets = {src: load_norm(split, src, self.norm).select(cols) for src in io.TARGET_SOURCES}
@@ -116,25 +125,46 @@ def precut(cands: pl.DataFrame, cfg: dict) -> pl.DataFrame:
 
 
 def train_ranker(cfg: dict, ctx: Context | None = None):
-    """Fit the stage-2 ranker on the train-fold rtrain sample against the TRAIN target pool."""
+    """Fit the stage-2 ranker on a train-fold S1 sample against the TRAIN target pool.
+
+    Chunked; keeps every positive and a deterministic `neg_rate` share of negatives to bound memory.
+    """
+    import numpy as np
+
     from er.blocking import ranker
 
+    rcfg = cfg["ranker"]
     ctx = ctx or Context(cfg, "train")
     channels = [ch["id"] for ch in cfg["channels"]]
     feats = ranker.feature_names(channels)
-    ids = subset_ids(load_split(), cfg["ranker"].get("train_subset", "rtrain"))
-    cands, queries = ctx.collect(ids, "ranker-train", {})
-    # Canonical row order: HistGradientBoosting's early-stopping split depends on it.
-    df = ranker.build(precut(cands, cfg), channels, queries, ctx.all_targets).sort("s1_id", "target_id")
-    y = ranker.label(df, io.load_truth().filter(pl.col("s1_id").is_in(ids.implode())))
-    model = ranker.fit(df, y, feats)
-    return model, feats, channels, {"train_pairs": int(len(y)), "pos_rate": float(y.mean())}
+    ids = subset_ids(load_split(), rcfg.get("train_subset", "rtrain"))
+    truth = io.load_truth().filter(pl.col("s1_id").is_in(ids.implode()))
+    neg_rate = rcfg.get("neg_rate", 1.0)
+    parts, n_pairs, offset = [], 0, 0
+    for i, chunk in enumerate(_chunks(ids.sort(), cfg.get("chunk", CHUNK))):
+        cands, queries = ctx.collect(chunk, "ranker-train", {})
+        # Canonical row order: sampling and HistGradientBoosting's early-stopping split depend on it.
+        df = ranker.build(precut(cands, cfg), channels, queries, ctx.all_targets).sort("s1_id", "target_id")
+        y = ranker.label(df, truth.filter(pl.col("s1_id").is_in(chunk.implode())))
+        n_pairs += len(y)
+        keep = (y == 1) | (np.random.default_rng(i).random(len(y)) < neg_rate)
+        grp = df.select(pl.struct("s1_id", "src").rank("dense").cast(pl.Int64))  # contiguous: sorted by s1, target
+        parts.append((ranker._matrix(df, feats)[keep], y[keep], grp.to_series().to_numpy()[keep] + offset))
+        offset += int(grp.max().item()) + 1
+        del cands, queries, df
+        gc.collect()
+    X = np.concatenate([p[0] for p in parts])
+    y = np.concatenate([p[1] for p in parts])
+    groups = np.concatenate([p[2] for p in parts])
+    model = ranker.fit_matrix(X, y, rcfg.get("model", "hgb"), groups)
+    return model, feats, channels, {"train_s1": ids.len(), "candidate_pairs": n_pairs, "train_rows": int(len(y)),
+                                    "pos_rate": float(y.mean()), "neg_rate": neg_rate}
 
 
 def release_caches() -> None:
     from er.blocking.channels import dense, exact, sparse
 
-    for cache in (sparse._PREPARED, exact._TARGET_CACHE, dense._GPU, _HOUSE_DF, _HOUSE_TK):
+    for cache in (sparse._PREPARED, exact._TARGET_CACHE, dense._GPU, _HOUSE_DF, _HOUSE_TK, _FILTERED):
         cache.clear()
     gc.collect()
 
@@ -144,7 +174,30 @@ def _chunks(ids: pl.Series, size: int):
         yield ids.slice(i, size)
 
 
-def run(config_path: str, subset: str | None = None) -> dict:
+def _misses(truth: pl.DataFrame, cands: pl.DataFrame, cut: pl.DataFrame, ranked: pl.DataFrame,
+            k: int) -> pl.DataFrame:
+    """True links absent from the ranker's top-k, tagged by the stage that lost them."""
+    tl = truth.explode("truth", empty_as_null=True).drop_nulls("truth").select(
+        "s1_id", pl.col("truth").alias("target_id"))
+    best = cands.group_by("s1_id", "target_id").agg(
+        pl.col("rank").min().alias("best_rank"),
+        pl.col("channel").sort_by("rank").first().alias("best_channel"),
+        pl.col("channel").n_unique().alias("n_channels"))
+    return (
+        tl.join(ranked.select("s1_id", "target_id", "frank", "p"), on=["s1_id", "target_id"], how="left")
+        .filter(pl.col("frank").is_null() | (pl.col("frank") > k))
+        .join(best, on=["s1_id", "target_id"], how="left")
+        .join(cut.select("s1_id", "target_id").unique().with_columns(pl.lit(True).alias("in_cut")),
+              on=["s1_id", "target_id"], how="left")
+        .with_columns(
+            pl.when(pl.col("best_rank").is_null()).then(pl.lit("not_retrieved"))
+            .when(pl.col("in_cut").is_null()).then(pl.lit("precut_dropped"))
+            .otherwise(pl.lit("ranked_out")).alias("stage"))
+        .drop("in_cut")
+    )
+
+
+def run(config_path: str, subset: str | None = None, save_misses: bool = False) -> dict:
     cfg = tomllib.loads(Path(config_path).read_text(encoding="utf-8"))
     subset = subset or cfg.get("subset", "dev")
     ctx = Context(cfg, "train")
@@ -168,6 +221,7 @@ def run(config_path: str, subset: str | None = None) -> dict:
     rows: dict[str, list[pl.DataFrame]] = defaultdict(list)
     unique = defaultdict(int)
     timings: dict = {}
+    misses: list[pl.DataFrame] = []
     for chunk in _chunks(ids, cfg.get("chunk", CHUNK)):
         cands, queries = ctx.collect(chunk, subset, timings)
         truth = truth_all.filter(pl.col("s1_id").is_in(chunk.implode()))
@@ -189,6 +243,8 @@ def run(config_path: str, subset: str | None = None) -> dict:
             timings["ranker"] = timings.get("ranker", 0.0) + time.perf_counter() - t0
             for k in cfg["ranker"].get("budgets", budgets):
                 rows[f"ranker@{k}"].append(row_table(truth, ranked.filter(pl.col("frank") <= k)))
+            if save_misses:
+                misses.append(_misses(truth, cands, cut, ranked, 10))
             del cut, ranked
         del cands, fused, solo, queries
         gc.collect()
@@ -222,6 +278,8 @@ def run(config_path: str, subset: str | None = None) -> dict:
         "peak_rss_gb": round(getattr(psutil.Process().memory_info(), "peak_wset", 0) / 1e9, 1),
     })
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, default=str))
+    if misses:
+        pl.concat(misses).write_parquet(io.ARTIFACTS / "misses" / f"{run_id}.parquet", mkdir=True)
     return metrics
 
 
