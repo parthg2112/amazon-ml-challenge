@@ -71,26 +71,29 @@ Channels run independently per target source (S2, S3) and are unioned. Standalon
 
 Other findings:
 
+- **Ranker pre-cut (v3_pc20) is kept.** Only pairs ranked ≤20 by at least one channel get ranker features. On full validation ranker@10 rises 0.99603 → **0.99658** (recall 98.69% → 98.87%) and ranker time halves: the long tail was noise for the ranker.
+- **Partitioning B7 dense is rejected** (−0.43 pp B7 recall); partitioning B2 raised B2's own recall 67.6% → 79.4% but lowered ranker@10 on dev, so B2 stays global.
+- **Speed:** targets are built once per process (pre-transposed region blocks, exact/house tables, GPU-resident embeddings); candidates are identical to before. Full validation 31 min → 16 min; all parallel work capped at 11 threads (`ER_THREADS`).
 - **Region partitioning** is the country-aware speed lever. Each query searches only targets in its canonical region plus targets with unknown region. B5 went from 402 s to 27 s on dev (15×) with identical recall (95.18% vs 95.16%) and higher full coverage.
 - **Global n-gram pruning is rejected.** `max_df=0.002` cut B5 recall from 95% to 76%.
 - **RRF fusion is rejected.** At K=50 per source it scored below the best single channel (0.969 vs 0.981).
 - **The learned ranker is kept.** It is trained on a separate 2% train-fold sample (`rtrain`, 35k S1). Features are per-channel rank and score plus 8 rapidfuzz similarities and house/region/legal agree-clash-unknown flags.
 
-### Ceiling vs budget (v3 = all kept channels + ranker)
+### Ceiling vs budget (full validation, 442k S1)
 
-| K per source | cands/S1 | dev pair recall | dev full coverage | dev oracle F0.5 | val oracle F0.5 |
+| K per source | cands/S1 | v3 oracle F0.5 | **v3_pc20** pair recall | **v3_pc20** full coverage | **v3_pc20** oracle F0.5 |
 |---|---|---|---|---|---|
-| 5 | 10 | 98.04% | 93.4% | 0.9948 | VAL5 |
-| 10 | 20 | 98.76% | 95.7% | 0.9965 | VAL10 |
-| 20 | 40 | 98.97% | 96.4% | 0.9971 | VAL20 |
-| 50 | 100 | 99.12% | 96.9% | 0.9975 | VAL50 |
-| union (no cap) | 388 | 99.49% | 98.2% | 0.9986 | VALU |
+| 5 | 10 | 0.9943 | 98.30% | 94.2% | 0.9953 |
+| 10 | 20 | 0.9960 | 98.87% | 96.1% | **0.9966** |
+| 20 | 40 | 0.9967 | 99.06% | 96.8% | 0.9971 |
+| 50 | 100 | 0.9971 | 99.20% | 97.2% | 0.9975 |
+| union (no cap) | 388 | 0.9984 | 99.47% | 98.2% | 0.9984 |
 
-Chosen shortlist: **K=10 per source (20 candidates per S1)**. It is above the 95% recall target, and Step 4 then scores 35M test pairs instead of 670M. The remaining India gap (95.9% vs US 99.0% recall at K=50) comes mostly from native-script and name-replaced targets.
+Chosen shortlist: **v3_pc20, K=10 per source (20 candidates per S1)**: 98.87% pair recall, 96.1% full coverage, 0.9966 oracle F0.5 on full validation. It is above the 95% recall target, and Step 4 then scores 35M test pairs instead of 670M. The remaining India gap (95.9% vs US 99.0% recall at K=50) comes mostly from native-script and name-replaced targets.
 
 ## 6. Test-set path
 
-`uv run er infer configs/blocking/b_v3.toml --k 10` trains the ranker on train and blocks all 1.73M test S1 against the test S2/S3 pools, France included. It writes `output/candidate_pairs.tsv` and a placeholder all-empty `output/matching_results.tsv`, which `student_resource/utils/validate_submission.py` accepts. TEST_RESULTS
+`uv run er infer configs/blocking/b_v3_pc20.toml --k 10` trains the ranker on train and blocks all 1.73M test S1 against the test S2/S3 pools, France included. It writes `output/candidate_pairs.tsv` and a placeholder all-empty `output/matching_results.tsv`, which `student_resource/utils/validate_submission.py` accepts. TEST_RESULTS
 
 ## 7. Step 4: features and model (validated end to end on real dev data)
 

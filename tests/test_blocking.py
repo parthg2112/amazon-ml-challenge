@@ -1,7 +1,7 @@
 import polars as pl
 
 from er.blocking.channels.exact import exact_channel
-from er.blocking.channels.sparse import FieldSpec, _partitioned, hash_texts, idf_weights, weighted
+from er.blocking.channels.sparse import FieldSpec, _blocks, _search, hash_texts, idf_weights, weighted
 from er.blocking.fuse import add_ranks, fuse
 
 
@@ -22,9 +22,11 @@ def test_partitioned_search_respects_region_and_unknown():
     qmat = weighted(hash_texts(["acme tools ny"], f), idf, 1.0)
     import numpy as np
 
-    out = _partitioned(pl.Series(["S1-1"]), np.array(["us_ny"]), qmat, pl.Series(["S2-ny", "S2-ca", "S2-unk"]),
-                       np.array(["us_ny", "us_ca", ""]), tmat, k=5, threshold=0.0)
+    blocks = _blocks(pl.Series(["S2-ny", "S2-ca", "S2-unk"]), tmat, np.array(["us_ny", "us_ca", ""]))
+    out = _search(pl.Series(["S1-1"]), qmat, blocks, np.array(["us_ny"]), k=5, threshold=0.0)
     assert set(out["target_id"]) == {"S2-ny", "S2-unk"}
+    out = _search(pl.Series(["S1-1"]), qmat, blocks, np.array([""]), k=5, threshold=0.0)
+    assert set(out["target_id"]) == {"S2-ny", "S2-ca", "S2-unk"}  # unkeyed query searches every block
 
 
 def test_fuse_ranks_per_source():

@@ -1,0 +1,59 @@
+# v5_b8: v3_pc20 + B8 name-only char search restricted to empty-address targets (53% of K=10 misses).
+name = "v5_b8"
+subset = "dev"
+budgets = [5, 10, 15, 20, 30, 50]
+
+[norm]
+learned = "configs/learned/n4_v1.json"
+
+[ranker]
+enabled = true
+train_subset = "rtrain"
+precut = 20
+
+[[channels]]
+id = "B1_name_concat"
+type = "exact"
+query_col = "name_concat"
+
+[[channels]]
+id = "B1_name_fold"
+type = "exact"
+query_col = "name_fold"
+
+[[channels]]
+id = "B1_house_token"
+type = "house_token"
+rarest = 2
+
+[[channels]]
+id = "B2_name_word"
+type = "sparse"
+k = 50
+fields = [{ col = "name_core", analyzer = "word", ngram = [1, 1] }]
+
+[[channels]]
+id = "B4_addr_char"
+type = "sparse"
+k = 50
+partition = "addr_region"
+fields = [{ col = "addr_norm", ngram = [3, 3] }]
+
+[[channels]]
+id = "B5_name_addr"
+type = "sparse"
+k = 50
+partition = "addr_region"
+fields = [{ col = "name_core", ngram = [3, 3] }, { col = "addr_norm", ngram = [3, 3] }]
+
+[[channels]]
+id = "B7_dense"
+type = "dense"
+k = 50
+
+[[channels]]
+id = "B8_name_emptyaddr"
+type = "sparse"
+k = 20
+target_filter = "addr_empty"
+fields = [{ col = "name_core", ngram = [3, 3] }]

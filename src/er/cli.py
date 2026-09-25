@@ -116,12 +116,15 @@ def cmd_diagnose(args: argparse.Namespace) -> None:
 def cmd_block(args: argparse.Namespace) -> None:
     from er.blocking.runner import leaderboard, run
 
-    m = run(args.config, args.subset)
+    m = run(args.config, args.subset, args.save_misses)
     rows = [{"K": k, **{x: b[x] for x in ("oracle_ceiling_f05", "pair_recall", "full_coverage",
                                             "mean_candidates")}} for k, b in m["budgets"].items()]
     rows.append({"K": "union", **{x: m["union"][x] for x in rows[0] if x != "K"}})
     print(_transpose([{**r, "K": str(r["K"])} for r in rows]))
     if "ranked" in m:
+        pu = m["precut_union"]
+        print(f"precut union: recall {pu['pair_recall']:.4f} oracle {pu['oracle_ceiling_f05']:.4f} "
+              f"mean cand {pu['mean_candidates']:.1f}")
         print("ranker:")
         print(_transpose([{"K": k, **{x: b[x] for x in ("oracle_ceiling_f05", "pair_recall", "full_coverage",
                                                           "mean_candidates")}} for k, b in m["ranked"].items()]))
@@ -140,6 +143,16 @@ def cmd_infer(args: argparse.Namespace) -> None:
 
     stats = infer(args.config, args.k, io.ROOT / "output")
     print(json.dumps(stats, indent=2, default=str))
+
+
+def cmd_finetune(args: argparse.Namespace) -> None:
+    from er.blocking.channels.dense import embed_source
+    from er.blocking.train_dense import finetune
+
+    out = finetune(args.name, args.pairs, args.batch, args.epochs, args.lr)
+    for split in args.embed:
+        for src in io.SOURCES:
+            embed_source(split, src, model=str(out))
 
 
 def cmd_leaderboard(args: argparse.Namespace) -> None:
@@ -216,12 +229,22 @@ def main() -> None:
     sp = sub.add_parser("block", help="run a blocking config and evaluate it")
     sp.add_argument("config")
     sp.add_argument("--subset", default=None, choices=["dev", "val", "rtrain"])
+    sp.add_argument("--save-misses", action="store_true", help="write lost true links to artifacts/misses/")
     sp.set_defaults(fn=cmd_block)
 
     sp = sub.add_parser("infer", help="test-set blocking → output/candidate_pairs.tsv")
     sp.add_argument("config")
     sp.add_argument("--k", type=int, default=10, help="ranker budget per target source")
     sp.set_defaults(fn=cmd_infer)
+
+    sp = sub.add_parser("finetune", help="contrastive fine-tune of the dense retriever, then re-embed")
+    sp.add_argument("--name", default="e5s_ft1")
+    sp.add_argument("--pairs", type=int, default=600_000)
+    sp.add_argument("--batch", type=int, default=512)
+    sp.add_argument("--epochs", type=int, default=1)
+    sp.add_argument("--lr", type=float, default=5e-5)
+    sp.add_argument("--embed", nargs="*", default=["train"], help="splits to re-embed with the new model")
+    sp.set_defaults(fn=cmd_finetune)
 
     sp = sub.add_parser("leaderboard", help="rebuild reports/leaderboard.md")
     sp.set_defaults(fn=cmd_leaderboard)

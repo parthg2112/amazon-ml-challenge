@@ -88,7 +88,7 @@ def normalize_source(split: str, src: str, cfg: NormConfig, workers: int | None 
     path = str(io.parquet_path(split, src))
     n = pl.scan_parquet(path).select(pl.len()).collect().item()
     tasks = [(path, off, SHARD_ROWS, asdict(cfg)) for off in range(0, n, SHARD_ROWS)]
-    workers = workers or os.cpu_count() or 12
+    workers = workers or io.THREADS
     t0 = time.perf_counter()
     os.environ["POLARS_MAX_THREADS"] = "1"  # children only; parent pool already initialized
     with ProcessPoolExecutor(max_workers=workers) as ex:
