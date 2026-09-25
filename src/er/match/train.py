@@ -77,14 +77,58 @@ def cv_train_xgb(X: np.ndarray, y: np.ndarray, fold_arr: np.ndarray, params: dic
     return oof, models, np.mean(importances, axis=0)
 
 
+class CatModel:
+    """Same adapter contract as `XgbModel`, for CatBoost (Apache-2.0)."""
+
+    def __init__(self, model):
+        self.model = model
+        self.best_iteration = model.get_best_iteration() or model.tree_count_ - 1
+
+    def predict(self, X: np.ndarray, num_iteration: int | None = None) -> np.ndarray:
+        it = self.best_iteration if num_iteration is None else num_iteration
+        return self.model.predict_proba(X, ntree_end=it + 1)[:, 1]
+
+    def feature_importance(self, importance_type: str = "gain") -> np.ndarray:
+        return np.asarray(self.model.get_feature_importance())
+
+
+CAT_PARAMS = {"loss_function": "Logloss", "eval_metric": "Logloss", "learning_rate": 0.08, "depth": 8,
+              "l2_leaf_reg": 3.0, "random_seed": 0, "verbose": False, "allow_writing_files": False}
+
+
+def cv_train_cat(X: np.ndarray, y: np.ndarray, fold_arr: np.ndarray, params: dict | None = None,
+                num_boost_round: int = 1000, early_stopping_rounds: int = 40):
+    from catboost import CatBoostClassifier
+
+    params = {**CAT_PARAMS, **(params or {})}
+    oof = np.zeros(len(y), dtype=np.float32)
+    models, importances = [], []
+    for f in sorted(set(fold_arr.tolist())):
+        tr, va = fold_arr != f, fold_arr == f
+        m = CatBoostClassifier(iterations=num_boost_round, early_stopping_rounds=early_stopping_rounds,
+                               **params)
+        m.fit(X[tr], y[tr], eval_set=(X[va], y[va]))
+        wrapped = CatModel(m)
+        oof[va] = wrapped.predict(X[va])
+        models.append(wrapped)
+        importances.append(wrapped.feature_importance())
+    return oof, models, np.mean(importances, axis=0)
+
+
 def cv_train(df: pl.DataFrame, y: np.ndarray, fold_col: str, feature_names: list[str],
             categorical: list[str], params: dict | None = None, num_boost_round: int = 500,
             early_stopping_rounds: int = 30, backend: str = "lgbm") -> tuple[np.ndarray, list, np.ndarray]:
     """Leave-one-fold-out training; returns out-of-fold probabilities, per-fold boosters, mean gain importance.
 
-    backend: "lgbm" (CPU, categorical-aware) | "xgb_gpu" (CUDA; categorical codes are small ordered ints)."""
-    if backend == "xgb_gpu":
-        return cv_train_xgb(matrix(df, feature_names), y, df[fold_col].to_numpy(), params)
+    backend: "lgbm" (CPU, categorical-aware) | "xgb_gpu" (CUDA; categorical codes are small ordered ints)
+    | "xgb_cpu" (same trees, no CUDA) | "catboost"."""
+    if backend in ("xgb_gpu", "xgb_cpu"):
+        p = dict(params or {})
+        if backend == "xgb_cpu":
+            p.setdefault("device", "cpu")
+        return cv_train_xgb(matrix(df, feature_names), y, df[fold_col].to_numpy(), p)
+    if backend == "catboost":
+        return cv_train_cat(matrix(df, feature_names), y, df[fold_col].to_numpy(), params)
     import lightgbm as lgb
 
     params = {**DEFAULT_PARAMS, **(params or {})}

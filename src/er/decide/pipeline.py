@@ -8,16 +8,30 @@ chosen k with no chance to fall back to its next-best candidate, which is strict
 
 from __future__ import annotations
 
+import numpy as np
 import polars as pl
 
-import numpy as np
-
-from er.decide import evaluate, exact_f05, exclusivity, expected_f05, threshold
+from er.decide import evaluate, exact_f05, exclusivity, expected_f05, linkcount, threshold
 
 FINE_GRID = np.round(np.arange(0.02, 0.99, 0.01), 2)  # review M6: 0.05 steps were too coarse
 
 
-def run(oof: pl.DataFrame, truth: pl.DataFrame) -> dict:
+def linkcount_rules(excl: pl.DataFrame, prior: linkcount.LinkPrior, n_s1: int,
+                    tuned_threshold: float) -> dict[str, pl.DataFrame]:
+    """Area-4 candidate rules. All four are label-free at prediction time, so France can use them."""
+    capped = linkcount.apply_caps(excl, prior)
+    t_prior = linkcount.prior_matched_threshold(excl, n_s1, prior.mean_total)
+    return {
+        "2d_prior_tilted_exact_f05": linkcount.select_tilted(excl, prior).select("s1_id", "target_id"),
+        "2e_capped_tuned_threshold": threshold.predict(capped, tuned_threshold),
+        "2f_expected_count_topk": linkcount.select_by_expected_count(excl, prior, blend=0.25)
+        .select("s1_id", "target_id"),
+        "2g_prior_matched_threshold": threshold.predict(excl, t_prior),
+    }
+
+
+def run(oof: pl.DataFrame, truth: pl.DataFrame, prior: linkcount.LinkPrior | None = None,
+        n_s1_universe: int | None = None) -> dict:
     truth_subset = truth.filter(pl.col("s1_id").is_in(oof["s1_id"].unique().implode()))
     stages: dict[str, dict] = {}
 
@@ -46,10 +60,21 @@ def run(oof: pl.DataFrame, truth: pl.DataFrame) -> dict:
     stage2b_scarcity_preds = expected_f05.select(excl_scarcity).select("s1_id", "target_id")
     stages["2b_per_entity_scarcity_exclusivity"] = evaluate.stage_metrics(stage2b_scarcity_preds, truth_subset)
 
+    prior = linkcount.load_prior() if prior is None else prior
+    n_s1 = truth_subset.height if n_s1_universe is None else n_s1_universe
+    lc_preds = linkcount_rules(excl_max, prior, n_s1, best_t)
+    for stage, preds in lc_preds.items():
+        stages[stage] = evaluate.stage_metrics(preds, truth_subset)
+    stages["2g_prior_matched_threshold"]["threshold"] = linkcount.prior_matched_threshold(
+        excl_max, n_s1, prior.mean_total)
+
     decision_winner = max(
         [("tuned_global_threshold", stages["2a_tuned_global_threshold"]["macro_f05"]),
          ("per_entity_expected_f05", stages["2b_per_entity_expected_f05"]["macro_f05"]),
-         ("exact_expected_f05", stages["2c_exact_expected_f05"]["macro_f05"])],
+         ("exact_expected_f05", stages["2c_exact_expected_f05"]["macro_f05"]),
+         ("prior_tilted_exact_f05", stages["2d_prior_tilted_exact_f05"]["macro_f05"]),
+         ("capped_tuned_threshold", stages["2e_capped_tuned_threshold"]["macro_f05"]),
+         ("expected_count_topk", stages["2f_expected_count_topk"]["macro_f05"])],
         key=lambda kv: kv[1],
     )[0]
     exclusivity_winner = max(
@@ -64,12 +89,19 @@ def run(oof: pl.DataFrame, truth: pl.DataFrame) -> dict:
         final_preds = threshold.predict(chosen_excl, best_t)
     elif decision_winner == "exact_expected_f05":
         final_preds = exact_f05.select(chosen_excl).select("s1_id", "target_id")
+    elif decision_winner in ("prior_tilted_exact_f05", "capped_tuned_threshold", "expected_count_topk"):
+        final_preds = linkcount_rules(chosen_excl, prior, n_s1, best_t)[
+            {"prior_tilted_exact_f05": "2d_prior_tilted_exact_f05",
+             "capped_tuned_threshold": "2e_capped_tuned_threshold",
+             "expected_count_topk": "2f_expected_count_topk"}[decision_winner]]
     else:
         final_preds = expected_f05.select(chosen_excl).select("s1_id", "target_id")
     final_metrics = evaluate.stage_metrics(final_preds, truth_subset)
     stages["3_final"] = final_metrics
 
     nested = nested_threshold(excl_max, truth_subset) if "cv_fold" in oof.columns else None
+    # Predicted links per S1 against the prior: the number that exposes under-linking on a new country.
+    link_rate = {"predicted_per_s1": final_preds.height / max(n_s1, 1), "prior_per_s1": prior.mean_total}
     return {
         "nested_threshold": nested,
         "n_s1": oof["s1_id"].n_unique(),
@@ -78,6 +110,10 @@ def run(oof: pl.DataFrame, truth: pl.DataFrame) -> dict:
         "decision_winner": decision_winner,
         "exclusivity_winner": exclusivity_winner,
         "global_threshold": {"best": best_t, "best_macro_f05": best_t_f05, "curve": curve},
+        # Not a winner candidate: in-distribution it cannot beat a threshold tuned on labels. It is the
+        # label-free fallback for a country where the tuned threshold has no reason to transfer.
+        "prior_matched_threshold": stages["2g_prior_matched_threshold"],
+        "link_rate": link_rate,
         "pr_curve": evaluate.pr_curve(excl_max, truth_subset).to_dicts(),
         "final": final_metrics,
     }

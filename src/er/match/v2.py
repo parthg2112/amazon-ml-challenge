@@ -14,9 +14,9 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 
 from er import io
 from er.blocking import ranker
-from er.decide import exact_f05, exclusivity, expected_f05, pipeline, threshold
-from er.match import features, train
 from er.blocking.runner import release_caches
+from er.decide import exact_f05, exclusivity, expected_f05, linkcount, pipeline, threshold
+from er.match import features, train
 from er.match.dataset import Universe
 from er.metrics import macro_f05
 from er.split import load_split, subset_ids
@@ -24,13 +24,27 @@ from er.split import load_split, subset_ids
 MODELS = io.ARTIFACTS / "models" / "match"
 
 
-def _policy_predict(scored: pl.DataFrame, policy: dict) -> pl.DataFrame:
+def _policy_predict(scored: pl.DataFrame, policy: dict, n_s1: int | None = None) -> pl.DataFrame:
+    """Apply a frozen policy. `n_s1` (the scored universe, including S1 with no candidates) is needed
+    only by the prior-matched rule, which sets its cutoff from the predicted link rate."""
     excl = (exclusivity.resolve_scarcity_weighted(scored) if policy["exclusivity_winner"] == "scarcity_weighted"
             else exclusivity.resolve_max_probability(scored))
-    if policy["decision_winner"] == "tuned_global_threshold":
+    rule = policy["decision_winner"]
+    if rule == "tuned_global_threshold":
         return threshold.predict(excl, policy["threshold"])
-    if policy["decision_winner"] == "exact_expected_f05":
+    if rule == "exact_expected_f05":
         return exact_f05.select(excl).select("s1_id", "target_id")
+    if rule in ("prior_tilted_exact_f05", "capped_tuned_threshold", "expected_count_topk",
+                "prior_matched_threshold"):
+        prior = linkcount.load_prior()
+        if rule == "prior_tilted_exact_f05":
+            return linkcount.select_tilted(excl, prior).select("s1_id", "target_id")
+        if rule == "capped_tuned_threshold":
+            return threshold.predict(linkcount.apply_caps(excl, prior), policy["threshold"])
+        if rule == "expected_count_topk":
+            return linkcount.select_by_expected_count(excl, prior, blend=0.25).select("s1_id", "target_id")
+        n = excl["s1_id"].n_unique() if n_s1 is None else n_s1
+        return threshold.predict(excl, linkcount.prior_matched_threshold(excl, n, prior.mean_total))
     return expected_f05.select(excl).select("s1_id", "target_id")
 
 
@@ -138,9 +152,9 @@ def submit(name: str = "v2", parts: int | None = None) -> dict:
         gc.collect()
     scored = pl.concat(parts)
     scored.write_parquet(io.ARTIFACTS / "match" / f"test_scored_{name}_p{parts}.parquet", mkdir=True)  # for diagnostics
-    preds = _policy_predict(scored, bundle["policy"])
-
     test_ids = pl.concat(uni.chunks)
+    preds = _policy_predict(scored, bundle["policy"], n_s1=test_ids.len())
+
     out = io.ROOT / "output"
     out.mkdir(exist_ok=True)
 
@@ -155,9 +169,12 @@ def submit(name: str = "v2", parts: int | None = None) -> dict:
 
     full = write(preds, "matched_entity_ids", "matching_results.tsv")
     write(scored, "candidate_entity_ids", "candidate_pairs.tsv")
+    prior = linkcount.load_prior()
     stats = {"name": name, "test_s1": test_ids.len(), "scored_pairs": scored.height,
              "predicted_pairs": preds.height, "s1_with_matches": int((full["matched_entity_ids"] != "").sum()),
-             "policy": bundle["policy"], "ctx_parts": parts}
+             "policy": bundle["policy"], "ctx_parts": parts,
+             # Under-linking is the visible symptom of a threshold that did not transfer (area 4).
+             "links_per_s1": preds.height / max(test_ids.len(), 1), "prior_links_per_s1": prior.mean_total}
     (io.REPORTS / f"submit_{name}.json").write_text(json.dumps(stats, indent=2))
     return stats
 

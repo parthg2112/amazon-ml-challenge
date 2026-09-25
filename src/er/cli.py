@@ -175,6 +175,47 @@ def cmd_submit2(args: argparse.Namespace) -> None:
     print(json.dumps(v2.submit(args.name, args.ctx_parts), indent=2, default=str))
 
 
+def cmd_transfer(args: argparse.Namespace) -> None:
+    from er.match import transfer
+
+    r = transfer.run(args.config, args.k, args.scope, tuple(args.arms), args.backend, args.name)
+    print(json.dumps({"arms": [{k: a[k] for k in ("arm", "overall", "in_distribution", "held_out", "gap")}
+                               for a in r["arms"]],
+                      "smallest_worst_case_gap": r["smallest_worst_case_gap"]}, indent=2, default=str))
+
+
+def cmd_tune(args: argparse.Namespace) -> None:
+    from er.match import tune
+
+    r = tune.run(args.config, args.k, args.scope, args.backend, args.trials, args.frac,
+                 not args.no_monotone, args.name)
+    print(json.dumps({k: r[k] for k in ("subsample_scores", "best_params", "full_frame_macro_f05",
+                                        "seconds")}, indent=2, default=str))
+
+
+def cmd_crossenc(args: argparse.Namespace) -> None:
+    from er.match import cross_encoder
+
+    out = cross_encoder.finetune(args.name, args.config, args.k, args.n_s1, args.batch, args.epochs,
+                                 args.lr, args.model)
+    print(json.dumps({"model_dir": str(out)}, indent=2))
+
+
+def cmd_linkcount(args: argparse.Namespace) -> None:
+    """Seconds-long check on saved OOF: is the count prior worth wiring into the decision rule?"""
+    from er.decide import linkcount
+
+    oof = pl.read_parquet(io.ARTIFACTS / "match" / f"oof_{args.name}.parquet")
+    prior = linkcount.load_prior()
+    diag = linkcount.count_diagnostics(oof, prior, args.n_s1)
+    truth = io.load_truth().filter(pl.col("s1_id").is_in(oof["s1_id"].unique().implode()))
+    n_s1 = truth.height if args.n_s1 is None else args.n_s1
+    diag["prior_matched_threshold"] = linkcount.prior_matched_threshold(oof, n_s1, prior.mean_total)
+    diag["prior"] = {"mean_total": prior.mean_total, "caps": prior.caps,
+                     "per_source_mean": {s: prior.mean_src(s) for s in prior.per_src}}
+    print(json.dumps(diag, indent=2, default=str))
+
+
 def cmd_leaderboard(args: argparse.Namespace) -> None:
     from er.blocking.runner import leaderboard
 
@@ -291,6 +332,42 @@ def main() -> None:
     sp.add_argument("--name", default="v2")
     sp.add_argument("--ctx-parts", type=int, default=None, help="competitor partitions (default: density-matched)")
     sp.set_defaults(fn=cmd_submit2)
+
+    sp = sub.add_parser("transfer", help="area 2: ablate the ranker score / add within-record views, leave-country-out")
+    sp.add_argument("config")
+    sp.add_argument("--k", type=int, default=10)
+    sp.add_argument("--name", default="transfer")
+    sp.add_argument("--scope", default="val", choices=["val", "full"])
+    sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "xgb_cpu", "lgbm", "catboost"])
+    sp.add_argument("--arms", nargs="+", default=["base", "no_p", "rel", "rel_no_p"])
+    sp.set_defaults(fn=cmd_transfer)
+
+    sp = sub.add_parser("tune", help="area 3: Optuna search with monotone constraints (XGBoost or CatBoost)")
+    sp.add_argument("config")
+    sp.add_argument("--k", type=int, default=10)
+    sp.add_argument("--name", default="tune")
+    sp.add_argument("--scope", default="val", choices=["val", "full"])
+    sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "xgb_cpu", "lgbm", "catboost"])
+    sp.add_argument("--trials", type=int, default=30)
+    sp.add_argument("--frac", type=float, default=0.3, help="fraction of S1 each trial fits on")
+    sp.add_argument("--no-monotone", action="store_true", help="disable monotone constraints")
+    sp.set_defaults(fn=cmd_tune)
+
+    sp = sub.add_parser("crossenc", help="area 1: fine-tune the Ditto-style cross-encoder on train-fold pairs")
+    sp.add_argument("config")
+    sp.add_argument("--k", type=int, default=10)
+    sp.add_argument("--name", default="ce1")
+    sp.add_argument("--n-s1", type=int, default=60_000)
+    sp.add_argument("--batch", type=int, default=128)
+    sp.add_argument("--epochs", type=int, default=1)
+    sp.add_argument("--lr", type=float, default=2e-5)
+    sp.add_argument("--model", default="intfloat/multilingual-e5-small")
+    sp.set_defaults(fn=cmd_crossenc)
+
+    sp = sub.add_parser("linkcount", help="area 4: is the link-count prior worth using? (seconds, on saved OOF)")
+    sp.add_argument("--name", default="v2", help="bundle name: reads artifacts/match/oof_<name>.parquet")
+    sp.add_argument("--n-s1", type=int, default=None, help="S1 universe size incl. records with no candidates")
+    sp.set_defaults(fn=cmd_linkcount)
 
     sp = sub.add_parser("leaderboard", help="rebuild reports/leaderboard.md")
     sp.set_defaults(fn=cmd_leaderboard)
