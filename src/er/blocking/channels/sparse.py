@@ -63,7 +63,9 @@ def target_counts(targets: dict[str, pl.DataFrame], f: FieldSpec, variant: str) 
             out[src] = sp.load_npz(path).tocsr()
         else:
             out[src] = hash_texts(df[f.col].fill_null("").to_list(), f)
-            sp.save_npz(path, out[src], compressed=False)
+            tmp = path.with_name(path.stem + ".partial.npz")  # rename only when complete: no truncated caches
+            sp.save_npz(tmp, out[src], compressed=False)
+            tmp.replace(path)
     return out
 
 

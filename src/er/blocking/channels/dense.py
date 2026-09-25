@@ -35,7 +35,9 @@ def embed_source(split: str, src: str, batch: int = 1024, force: bool = False, m
     t0 = time.perf_counter()
     emb = enc.encode(texts, batch_size=batch, normalize_embeddings=True, convert_to_numpy=True,
                        show_progress_bar=True).astype(np.float16)
-    np.save(path, emb)
+    tmp = path.with_name(path.stem + ".partial.npy")
+    np.save(tmp, emb)
+    tmp.replace(path)
     print(f"embedded {split}_{src}: {len(texts):,} in {time.perf_counter() - t0:.0f}s")
     return emb
 

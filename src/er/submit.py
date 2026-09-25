@@ -9,6 +9,7 @@ truth to tune against — tuning on test would be leakage into the only number t
 
 from __future__ import annotations
 
+import gc
 import json
 
 import numpy as np
@@ -46,14 +47,19 @@ def run(config_path: str, k: int = 10, match_subset: str = "dev", holdout_countr
     # validate on since the policy was already fixed in step 2).
     final_model = match_train.train_full(df_train, y, feature_names, categorical)
 
-    # 4) Score the real test set with that model, then the same calibration curve.
-    df_test, extra_test, test_ids = collect_match_features_test(config_path, k)
+    n_train_pairs = len(y)
+    del df_train, oof_df, oof, calibrated, y
+    gc.collect()
+
+    # 4) Score the real test set chunk by chunk (same model + calibration); keep only ids and p.
+    def score(chunk: pl.DataFrame) -> pl.DataFrame:
+        raw = final_model.predict(chunk.select(feature_names).to_numpy())
+        p = iso.transform(raw).astype(np.float32) if iso is not None else raw.astype(np.float32)
+        return chunk.select("s1_id", "target_id", "src").with_columns(pl.Series("p", p))
+
+    test_scored, extra_test, test_ids = collect_match_features_test(config_path, k, transform=score)
     if extra_test != extra:
         raise ValueError("train/test blocking-provenance columns differ — configs must match")
-    X_test = df_test.select(feature_names).to_numpy()
-    raw_test = final_model.predict(X_test)
-    p_test = iso.transform(raw_test).astype(np.float32) if iso is not None else raw_test.astype(np.float32)
-    test_scored = df_test.select("s1_id", "target_id", "src").with_columns(pl.Series("p", p_test))
 
     # 5) Apply the frozen policy: exclusivity, then the decision rule that won on OOF.
     excl_fn = (exclusivity.resolve_scarcity_weighted if decision["exclusivity_winner"] == "scarcity_weighted"
@@ -74,11 +80,18 @@ def run(config_path: str, k: int = 10, match_subset: str = "dev", holdout_countr
     out_dir = io.ROOT / "output"
     out_dir.mkdir(parents=True, exist_ok=True)
     full.write_csv(out_dir / "matching_results.tsv", separator="\t", quote_style="never")
+    # candidate_pairs.tsv = exactly the shortlist the classifier scored (PROBLEM_STATEMENT §5.2).
+    cand_lists = test_scored.sort("s1_id", "target_id").group_by("s1_id", maintain_order=True).agg(
+        pl.col("target_id").str.join(",").alias("candidate_entity_ids"))
+    test_ids.to_frame("source1_entity_id").join(
+        cand_lists.rename({"s1_id": "source1_entity_id"}), on="source1_entity_id", how="left"
+    ).with_columns(pl.col("candidate_entity_ids").fill_null("")).write_csv(
+        out_dir / "candidate_pairs.tsv", separator="\t", quote_style="never")
 
     stats = {
         "match_subset": match_subset, "holdout_country": holdout_country,
-        "train_pairs": len(y), "test_s1": test_ids.len(),
-        "test_pairs_scored": df_test.height, "predicted_pairs": final_preds.height,
+        "train_pairs": n_train_pairs, "test_s1": test_ids.len(),
+        "test_pairs_scored": test_scored.height, "predicted_pairs": final_preds.height,
         "s1_with_matches": int((full["matched_entity_ids"] != "").sum()),
         "decision_winner": decision["decision_winner"], "exclusivity_winner": decision["exclusivity_winner"],
         "threshold": decision["global_threshold"]["best"],

@@ -54,7 +54,12 @@ def test_submit_writes_matching_results_for_every_test_s1(tmp_path, monkeypatch)
     })
 
     monkeypatch.setattr(submit, "collect_match_features", lambda config_path, subset, k: (train_df, []))
-    monkeypatch.setattr(submit, "collect_match_features_test", lambda config_path, k: (test_df, [], test_ids))
+    def fake_test(config_path, k, transform=None):  # real function applies transform per chunk
+        half = test_df.height // 2
+        parts = [test_df.slice(0, half), test_df.slice(half)]
+        return pl.concat([transform(c) if transform else c for c in parts]), [], test_ids
+
+    monkeypatch.setattr(submit, "collect_match_features_test", fake_test)
     monkeypatch.setattr(submit.io, "load_truth", lambda: truth)
     monkeypatch.setattr(submit, "load_split", lambda: folds)
     monkeypatch.setattr(submit.io, "ROOT", tmp_path)
@@ -73,6 +78,12 @@ def test_submit_writes_matching_results_for_every_test_s1(tmp_path, monkeypatch)
     no_cand_ids = set(test_ids.to_list()) - set(test_df["s1_id"].unique().to_list())
     empties = result.filter(pl.col("source1_entity_id").is_in(no_cand_ids))
     assert (empties["matched_entity_ids"] == "").all()
+
+    cands = pl.read_csv(tmp_path / "output" / "candidate_pairs.tsv", separator="\t", infer_schema=False)
+    assert cands.height == test_ids.len()
+    matched = {t for row in result["matched_entity_ids"] if row for t in row.split(",")}
+    candidates = {t for row in cands["candidate_entity_ids"].fill_null("") if row for t in row.split(",")}
+    assert matched <= candidates  # every match was a candidate (PROBLEM_STATEMENT §5.2)
 
     assert stats["test_s1"] == test_ids.len()
     assert stats["decision_winner"] in ("tuned_global_threshold", "per_entity_expected_f05")

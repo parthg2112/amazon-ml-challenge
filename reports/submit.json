@@ -1,0 +1,14 @@
+{
+  "match_subset": "dev",
+  "holdout_country": "India",
+  "train_pairs": 890700,
+  "test_s1": 1732544,
+  "test_pairs_scored": 34650880,
+  "predicted_pairs": 5761146,
+  "s1_with_matches": 1635487,
+  "decision_winner": "tuned_global_threshold",
+  "exclusivity_winner": "max_probability",
+  "threshold": 0.7000000000000001,
+  "oof_macro_f05": 0.9736944125302001,
+  "calibration_applied": true
+}
