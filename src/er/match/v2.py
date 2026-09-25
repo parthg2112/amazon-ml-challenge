@@ -16,6 +16,7 @@ from er import io
 from er.blocking import ranker
 from er.decide import exact_f05, exclusivity, expected_f05, pipeline, threshold
 from er.match import features, train
+from er.blocking.runner import release_caches
 from er.match.dataset import Universe
 from er.metrics import macro_f05
 from er.split import load_split
@@ -112,6 +113,8 @@ def submit(name: str = "v2") -> dict:
     bundle = pickle.loads((MODELS / f"{name}.pkl").read_bytes())
     uni = Universe(bundle["config"], "test", bundle["k"])
     uni.shortlists()
+    uni._ctx = None  # pass 2 needs only cached shortlists + pools: drop the blocking context (~20 GB)
+    release_caches()
     gctx = uni.global_context()
     feats = bundle["features"]
     block = {"models": bundle["models"], "iso": bundle["iso"]}
