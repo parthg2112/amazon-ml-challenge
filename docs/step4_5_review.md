@@ -65,3 +65,27 @@ exact F-measure decision rule were never compared, so "best" is established only
 
 M1–M3 (correctness, ~2 h) → re-measure the Step 4/5 baseline on v9 blocking → items 5, 6 (cheap) →
 item 1 (largest expected gain) → items 2, 3 (decision layer) → item 7 (France) → item 4.
+
+## 5. Status after v2 (2026-09-25)
+
+Current best: `fit2` v2 on val scope (442k S1, 8.84M pairs, 86 features), XGBoost GPU 5-fold, fold-mean,
+isotonic, max-probability exclusivity, global threshold 0.72. OOF 0.97984 (nested 0.97981); leaderboard 0.972.
+
+| Item | Outcome | Evidence |
+|---|---|---|
+| M1 global context | fixed (val-scope universe); test density mismatch found and fixed by S1 hash partitions (M7) | `reports/match/v2.json`; 5x-sparser context costs 0.0009 on val |
+| M2 fold-mean scoring | fixed | `train.predict_mean` |
+| M3 per-pool IDF | fixed | `Universe._feature_inputs` |
+| M4 transfer, both directions | India-out 0.9441 (gap 0.033), US-out 0.9683; oracle threshold recovers only ~0.004 | `v2_transfer*.json` |
+| M5 subset guard | fixed by design (val-only training) | |
+| M6 nested threshold, 0.01 grid | optimism ≈ 0 (0.97981 vs 0.97984) | `v2_decision.json` |
+| Item 5 new features | kept: +0.006 over the dev baseline | `v2.json` |
+| Item 2 exact expected F0.5 | rejected: 0.97898 < 0.97984 (plug-in 0.97880) | `v2_decision.json` |
+| Item 4 stage-2 coherence stacking | rejected: 0.97975 | `src/er/match/stack.py` |
+| Item 7 self-training on pseudo-labels | rejected: India-out 0.9441 → 0.9449 at best | `v2_selftrain_proxy.json` |
+| Item 7 near-certain pair acceptance | France 99.2% on test (US 99.5%, India 93.7%) | `france_proxy_v2.json` |
+| Item 6 Optuna / CatBoost | not run | |
+| Items 1, 3, 8 | not run | |
+
+M7: a val-scope bundle sees ~4.3% of S1 per target pool; test sees 100%, so claims per record rose 23 → 80
+and positive margins fell 41% → 27%. `submit2` now counts competitors within density-matched S1 partitions.
