@@ -6,6 +6,7 @@ Queries are processed in chunks so validation (442k S1) and test (1.73M S1) stay
 from __future__ import annotations
 
 import gc
+import hashlib
 import json
 import time
 import tomllib
@@ -29,6 +30,7 @@ _HOUSE_DF: dict[tuple, pl.DataFrame] = {}  # target-side tables never change wit
 _HOUSE_TK: dict[tuple, pl.DataFrame] = {}
 _FILTERED: dict[tuple, dict[str, pl.DataFrame]] = {}
 CHUNK = 25_000
+CHANNEL_CACHE_VERSION = 1  # bump when channel code changes behaviour
 
 
 def _cardinality_bucket() -> pl.Expr:
@@ -101,17 +103,34 @@ class Context:
         self.all_targets = pl.concat([t.select("entity_id", *PAIR_COLS) for t in self.targets.values()])
         self.n_targets = self.all_targets.height
 
+    def _cache_path(self, ch: dict, ids: pl.Series) -> Path:
+        """Channel output is a pure function of channel config, normalized inputs, and query ids."""
+        from er.normalize.pipeline import norm_path
+
+        stamps = [norm_path(self.split, s, self.norm).stat().st_mtime_ns for s in io.SOURCES]
+        blob = json.dumps([CHANNEL_CACHE_VERSION, ch, self.norm.variant, self.split, stamps], sort_keys=True)
+        h = hashlib.sha1(blob.encode() + b"|" + ",".join(ids.to_list()).encode()).hexdigest()[:20]
+        return io.ARTIFACTS / "cache" / "channels" / f"{ch['id']}_{h}.parquet"
+
     def collect(self, ids: pl.Series, label: str, timings: dict) -> tuple[pl.DataFrame, pl.DataFrame]:
         queries = self.s1.filter(pl.col("entity_id").is_in(ids.implode()))
-        frames = []
+        frames, hits = [], 0
         for ch in self.cfg["channels"]:
             t0 = time.perf_counter()
-            df, _ = run_channel(ch, queries, self.targets, self.norm.variant, self.split)
+            path = self._cache_path(ch, ids) if self.cfg.get("cache_channels", True) else None
+            if path is not None and path.exists():
+                df = pl.read_parquet(path)
+                hits += 1
+            else:
+                df, _ = run_channel(ch, queries, self.targets, self.norm.variant, self.split)
+                if path is not None:
+                    df.write_parquet(path, mkdir=True)
             timings[ch["id"]] = timings.get(ch["id"], 0.0) + time.perf_counter() - t0
             frames.append(df)
         cands = pl.concat(frames, how="diagonal_relaxed").select(
             "s1_id", "target_id", "src", "channel", "score", "rank")
-        print(f"  [{label}] {queries.height:,} queries -> {cands.height:,} channel pairs")
+        print(f"  [{label}] {queries.height:,} queries -> {cands.height:,} channel pairs "
+              f"({hits}/{len(frames)} channels from cache)")
         return cands, queries
 
 

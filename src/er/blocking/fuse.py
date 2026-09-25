@@ -21,6 +21,7 @@ def fuse(cands: pl.DataFrame, weights: dict[str, float]) -> pl.DataFrame:
         .group_by("s1_id", "target_id", "src")
         .agg(pl.col("rrf").sum(), pl.col("channel").unique().sort().alias("channels"))
     )
-    return fused.with_columns(
+    # Sort first: group_by output order varies, and ordinal ranks break ties by row order.
+    return fused.sort(["s1_id", "src", "rrf", "target_id"], descending=[False, False, True, False]).with_columns(
         pl.col("rrf").rank("ordinal", descending=True).over("s1_id", "src").cast(pl.Int32).alias("frank")
     )

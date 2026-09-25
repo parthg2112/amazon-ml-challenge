@@ -124,6 +124,8 @@ def fit(df: pl.DataFrame, y: np.ndarray, features: list[str]) -> HistGradientBoo
 
 def rank_by_model(df: pl.DataFrame, model: HistGradientBoostingClassifier, features: list[str]) -> pl.DataFrame:
     p = score(model, _matrix(df, features))
-    return df.select("s1_id", "target_id", "src").with_columns(pl.Series("p", p.astype(np.float32))).with_columns(
+    out = df.select("s1_id", "target_id", "src").with_columns(pl.Series("p", p.astype(np.float32)))
+    # Tree scores tie often; sort so ordinal ranks break ties by target_id, not by row order.
+    return out.sort(["s1_id", "src", "p", "target_id"], descending=[False, False, True, False]).with_columns(
         pl.col("p").rank("ordinal", descending=True).over("s1_id", "src").cast(pl.Int32).alias("frank")
     )
