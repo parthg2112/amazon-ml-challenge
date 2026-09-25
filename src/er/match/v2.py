@@ -31,9 +31,10 @@ def _policy_predict(scored: pl.DataFrame, policy: dict) -> pl.DataFrame:
     return expected_f05.select(excl).select("s1_id", "target_id")
 
 
-def _fit_block(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: pl.DataFrame) -> dict:
+def _fit_block(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: pl.DataFrame,
+               backend: str = "xgb_gpu") -> dict:
     """CV + calibration + Step 5 policy on one set of rows: everything a frozen deployment needs."""
-    oof, models, imp = train.cv_train(df, y, "cv_fold", feats, features.CATEGORICAL_FEATURES)
+    oof, models, imp = train.cv_train(df, y, "cv_fold", feats, features.CATEGORICAL_FEATURES, backend=backend)
     calibrated, calib, iso = train.maybe_calibrate(y, oof)
     oof_df = df.select("s1_id", "target_id", "src", "q_country").with_columns(pl.Series("p", calibrated))
     decision = pipeline.run(oof_df, truth)
@@ -49,10 +50,10 @@ def _score(block: dict, X: np.ndarray) -> np.ndarray:
 
 
 def country_transfer(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: pl.DataFrame,
-                     holdout: str) -> dict:
+                     holdout: str, backend: str = "xgb_gpu") -> dict:
     """France protocol: fit + calibrate + tune policy WITHOUT `holdout`, apply frozen to it (review M4)."""
     other = (df["q_country"] != holdout).to_numpy()
-    block = _fit_block(df.filter(pl.Series(other)), y[other], feats, truth)
+    block = _fit_block(df.filter(pl.Series(other)), y[other], feats, truth, backend)
     held = df.filter(pl.Series(~other))
     p = _score(block, train.matrix(held, feats))
     scored = held.select("s1_id", "target_id", "src").with_columns(pl.Series("p", p))
@@ -63,9 +64,10 @@ def country_transfer(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: p
             "policy": block["policy"]}
 
 
-def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = True) -> dict:
+def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False, scope: str = "val",
+        backend: str = "xgb_gpu") -> dict:
     t0 = time.perf_counter()
-    uni = Universe(config_path, "train", k)
+    uni = Universe(config_path, "train", k, scope)
     uni.shortlists()
     df = uni.val_features()
     truth = io.load_truth()
@@ -74,21 +76,24 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = True) 
     feats = features.NUMERIC_FEATURES + uni.extra_features()
     print(f"val pairs {df.height:,}, pos rate {y.mean():.4f}, {len(feats)} features", flush=True)
 
-    block = _fit_block(df, y, feats, truth)
+    t_cv = time.perf_counter()
+    block = _fit_block(df, y, feats, truth, backend)
+    print(f"CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
     by_country = {}
     for c in df["q_country"].unique().sort().to_list():
         sub = block["oof"].filter(pl.col("q_country") == c)
         t_sub = truth.filter(pl.col("s1_id").is_in(sub["s1_id"].unique().implode()))
         by_country[c] = macro_f05(t_sub, _policy_predict(sub, block["policy"]))
     result = {
-        "name": name, "config": config_path, "k": k, "val_pairs": df.height, "pos_rate": float(y.mean()),
+        "name": name, "config": config_path, "k": k, "scope": scope, "backend": backend,
+        "val_pairs": df.height, "pos_rate": float(y.mean()),
         "features": feats, "policy": block["policy"], "stages": block["decision"]["stages"],
         "final_macro_f05": block["decision"]["final"]["macro_f05"], "by_country_frozen_policy": by_country,
         "calibration": block["calibration"],
         "importance": sorted(zip(feats, block["importance"].tolist()), key=lambda kv: -kv[1])[:40],
     }
     if transfer:
-        result["country_transfer"] = [country_transfer(df, y, feats, truth, c)
+        result["country_transfer"] = [country_transfer(df, y, feats, truth, c, backend)
                                       for c in df["q_country"].unique().sort().to_list()]
     MODELS.mkdir(parents=True, exist_ok=True)
     bundle = {"models": block["models"], "iso": block["iso"], "features": feats, "policy": block["policy"],

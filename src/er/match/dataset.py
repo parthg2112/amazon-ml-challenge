@@ -35,8 +35,11 @@ def _h(*parts) -> str:
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
-def universe_chunks(split: str, cfg: dict) -> list[pl.Series]:
-    """Chunk order reuses cached channel outputs: val chunks, then the ranker sample, then the rest."""
+def universe_chunks(split: str, cfg: dict, scope: str = "full") -> list[pl.Series]:
+    """Chunk order reuses cached channel outputs: val chunks, then the ranker sample, then the rest.
+
+    scope="val" (train only): competitors from the 442k val S1 (20% universe), the fast path;
+    scope="full": all 2.2M train S1, the exact match to test's full universe (review M1)."""
     size = cfg.get("chunk", CHUNK)
     sp = load_split()
     if split == "test":
@@ -44,6 +47,8 @@ def universe_chunks(split: str, cfg: dict) -> list[pl.Series]:
 
         return list(_chunks(load_norm("test", "S1", NormConfig(**cfg.get("norm", {})))["entity_id"], size))
     val = subset_ids(sp, "val")
+    if scope == "val":
+        return list(_chunks(val, size))
     rtrain = subset_ids(sp, cfg["ranker"].get("train_subset", "rtrain")).sort()
     rest = subset_ids(sp, "train").filter(~subset_ids(sp, "train").is_in(rtrain.implode())).sort()
     return list(_chunks(val, size)) + list(_chunks(rtrain, size)) + list(_chunks(rest, size))
@@ -54,10 +59,11 @@ def _dense_model(cfg: dict) -> str:
 
 
 class Universe:
-    def __init__(self, config_path: str, split: str, k: int = 10):
+    def __init__(self, config_path: str, split: str, k: int = 10, scope: str = "full"):
         self.config_path, self.split, self.k = config_path, split, k
         self.cfg = tomllib.loads(Path(config_path).read_text(encoding="utf-8"))
-        self.chunks = universe_chunks(split, self.cfg)
+        self.scope = scope
+        self.chunks = universe_chunks(split, self.cfg, scope)
         self.key = _h(SHORTLIST_VERSION, self.cfg, k, split)
         self.dir = CACHE / f"{split}_{self.key}"
         self._ranker = None

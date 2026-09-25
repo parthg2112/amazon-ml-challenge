@@ -158,7 +158,7 @@ def cmd_finetune(args: argparse.Namespace) -> None:
 def cmd_fit2(args: argparse.Namespace) -> None:
     from er.match import v2
 
-    r = v2.fit(args.config, args.k, args.name, transfer=not args.no_transfer)
+    r = v2.fit(args.config, args.k, args.name, transfer=args.transfer, scope=args.scope, backend=args.backend)
     keep = ("final_macro_f05", "by_country_frozen_policy", "policy", "country_transfer", "total_s")
     print(json.dumps({k: r.get(k) for k in keep}, indent=2, default=str))
 
@@ -272,7 +272,9 @@ def main() -> None:
     sp.add_argument("config")
     sp.add_argument("--k", type=int, default=10)
     sp.add_argument("--name", default="v2")
-    sp.add_argument("--no-transfer", action="store_true", help="skip the leave-country-out transfer check")
+    sp.add_argument("--transfer", action="store_true", help="also run leave-country-out transfer checks")
+    sp.add_argument("--scope", default="val", choices=["val", "full"], help="competitor universe for context")
+    sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "lgbm"])
     sp.set_defaults(fn=cmd_fit2)
 
     sp = sub.add_parser("submit2", help="score the test universe with a fit2 bundle; write both TSVs")

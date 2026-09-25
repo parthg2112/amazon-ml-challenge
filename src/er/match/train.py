@@ -30,10 +30,61 @@ DEFAULT_PARAMS = {
 }
 
 
+XGB_PARAMS = {
+    "device": "cuda", "tree_method": "hist", "objective": "binary:logistic", "eval_metric": "logloss",
+    "learning_rate": 0.08, "max_depth": 8, "min_child_weight": 20, "subsample": 0.8, "colsample_bytree": 0.8,
+    "max_bin": 256, "seed": 0,
+}
+
+
+class XgbModel:
+    """Adapter so fold-mean prediction treats XGBoost like a LightGBM Booster (predict + best_iteration)."""
+
+    def __init__(self, booster):
+        self.booster = booster
+        self.best_iteration = booster.best_iteration
+
+    def predict(self, X: np.ndarray, num_iteration: int | None = None) -> np.ndarray:
+        import xgboost as xgb
+
+        it = self.best_iteration if num_iteration is None else num_iteration
+        return self.booster.predict(xgb.DMatrix(X), iteration_range=(0, it + 1))
+
+    def feature_importance(self, importance_type: str = "gain") -> np.ndarray:
+        scores = self.booster.get_score(importance_type="total_gain")
+        return np.array([scores.get(f"f{i}", 0.0) for i in range(self.booster.num_features())])
+
+
+def cv_train_xgb(X: np.ndarray, y: np.ndarray, fold_arr: np.ndarray, params: dict | None = None,
+                 num_boost_round: int = 1000, early_stopping_rounds: int = 40) -> tuple[np.ndarray, list, np.ndarray]:
+    """Same contract as `cv_train`, on the GPU (~10x faster than CPU LightGBM at 9M rows)."""
+    import xgboost as xgb
+
+    params = {**XGB_PARAMS, **(params or {})}
+    oof = np.zeros(len(y), dtype=np.float32)
+    models, importances = [], []
+    for f in sorted(set(fold_arr.tolist())):
+        tr, va = fold_arr != f, fold_arr == f
+        dtr = xgb.QuantileDMatrix(X[tr], label=y[tr], max_bin=params["max_bin"])
+        dva = xgb.QuantileDMatrix(X[va], label=y[va], ref=dtr)
+        booster = xgb.train(params, dtr, num_boost_round=num_boost_round, evals=[(dva, "val")],
+                            early_stopping_rounds=early_stopping_rounds, verbose_eval=False)
+        m = XgbModel(booster)
+        oof[va] = m.predict(X[va])
+        models.append(m)
+        importances.append(m.feature_importance())
+        del dtr, dva
+    return oof, models, np.mean(importances, axis=0)
+
+
 def cv_train(df: pl.DataFrame, y: np.ndarray, fold_col: str, feature_names: list[str],
             categorical: list[str], params: dict | None = None, num_boost_round: int = 500,
-            early_stopping_rounds: int = 30) -> tuple[np.ndarray, list, np.ndarray]:
-    """Leave-one-fold-out training; returns out-of-fold probabilities, per-fold boosters, mean gain importance."""
+            early_stopping_rounds: int = 30, backend: str = "lgbm") -> tuple[np.ndarray, list, np.ndarray]:
+    """Leave-one-fold-out training; returns out-of-fold probabilities, per-fold boosters, mean gain importance.
+
+    backend: "lgbm" (CPU, categorical-aware) | "xgb_gpu" (CUDA; categorical codes are small ordered ints)."""
+    if backend == "xgb_gpu":
+        return cv_train_xgb(matrix(df, feature_names), y, df[fold_col].to_numpy(), params)
     import lightgbm as lgb
 
     params = {**DEFAULT_PARAMS, **(params or {})}
