@@ -1,0 +1,24 @@
+{
+  "India": {
+    "t_frozen": 0.75,
+    "f_frozen": 0.9440799181342809,
+    "t_oracle": 0.89,
+    "f_oracle": 0.9478390649458848,
+    "t_prior_match": 0.83,
+    "f_prior_match": 0.9468989073986199,
+    "src_links_per_s1": 3.3363619569684104,
+    "held_links_per_s1_at_frozen": 3.4051486916378964,
+    "true_links_per_s1": 3.4693814130090854
+  },
+  "US": {
+    "t_frozen": 0.73,
+    "f_frozen": 0.9682590285233614,
+    "t_oracle": 0.73,
+    "f_oracle": 0.9682584301880274,
+    "t_prior_match": 0.63,
+    "f_prior_match": 0.9675695377892408,
+    "src_links_per_s1": 3.3464522435879327,
+    "held_links_per_s1_at_frozen": 3.2966928563888342,
+    "true_links_per_s1": 3.458701069561054
+  }
+}

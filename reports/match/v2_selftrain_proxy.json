@@ -1,0 +1,20 @@
+{
+  "baseline_frozen": 0.9440799181342809,
+  "threshold": 0.75,
+  "pseudo_0.95_0.05": {
+    "coverage": 0.9285325227139176,
+    "pseudo_label_accuracy": 0.9948964130674218,
+    "f05_frozen_t": 0.9446177035703507
+  },
+  "pseudo_0.9_0.1": {
+    "coverage": 0.9576238530036614,
+    "pseudo_label_accuracy": 0.9927833938404842,
+    "f05_frozen_t": 0.9435664822482551
+  },
+  "pseudo_0.98_0.02": {
+    "coverage": 0.8856390973195317,
+    "pseudo_label_accuracy": 0.9968518721137243,
+    "f05_frozen_t": 0.9448859245255771
+  },
+  "total_s": 1060
+}

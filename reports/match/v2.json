@@ -1,0 +1,335 @@
+{
+  "name": "v2",
+  "config": "configs/blocking/b_v9.toml",
+  "k": 10,
+  "scope": "val",
+  "backend": "xgb_gpu",
+  "val_pairs": 8844660,
+  "pos_rate": 0.17276119149859914,
+  "features": [
+    "sim_name_ratio",
+    "sim_name_tset",
+    "sim_name_tsort",
+    "sim_name_partial",
+    "sim_name_jw",
+    "sim_full_tset",
+    "sim_addr_ratio",
+    "sim_addr_tset",
+    "sim_city_ratio",
+    "sim_min_tset",
+    "sim_min_ratio",
+    "sim_name_char3",
+    "sim_addr_char3",
+    "name_tok_overlap_n",
+    "name_tok_overlap_idf",
+    "name_tok_rare_overlap_n",
+    "name_tok_extra_q_n",
+    "name_tok_extra_q_idf",
+    "name_tok_extra_t_n",
+    "name_tok_extra_t_idf",
+    "addr_tok_overlap_n",
+    "addr_tok_overlap_idf",
+    "addr_tok_rare_overlap_n",
+    "addr_tok_extra_q_n",
+    "addr_tok_extra_q_idf",
+    "addr_tok_extra_t_n",
+    "addr_tok_extra_t_idf",
+    "landmark_tok_overlap_n",
+    "landmark_tok_overlap_idf",
+    "landmark_tok_rare_overlap_n",
+    "landmark_tok_extra_q_n",
+    "landmark_tok_extra_q_idf",
+    "landmark_tok_extra_t_n",
+    "landmark_tok_extra_t_idf",
+    "name_core_exact",
+    "alias_match",
+    "script_mismatch",
+    "q_name_native_f",
+    "t_name_native_f",
+    "legal_relation",
+    "house_state",
+    "house_abs_diff",
+    "house_rel_diff",
+    "region_state",
+    "postal_state",
+    "locality_state",
+    "unit_state",
+    "both_addr_empty",
+    "either_addr_empty",
+    "addr_num_overlap",
+    "addr_num_jaccard",
+    "same_country",
+    "is_s3",
+    "rank_within_s1_src",
+    "rank_by_name",
+    "rank_by_addr",
+    "n_cands_same_src",
+    "n_cands_total",
+    "n_s1_claiming_record",
+    "margin_to_best_competitor",
+    "support_opposite_src_best",
+    "house_digit_dropped",
+    "house_digit_changed",
+    "name_min_exact",
+    "name_noise_only_diff",
+    "rank_B1_name_concat",
+    "rank_B1_name_fold",
+    "rank_B1_house_token",
+    "rank_B2_name_word",
+    "rank_B4_addr_char",
+    "rank_B5_name_addr",
+    "rank_B7_dense",
+    "rank_B1_name_min",
+    "score_B1_name_concat",
+    "score_B1_name_fold",
+    "score_B1_house_token",
+    "score_B2_name_word",
+    "score_B4_addr_char",
+    "score_B5_name_addr",
+    "score_B7_dense",
+    "score_B1_name_min",
+    "n_channels",
+    "best_rank",
+    "p",
+    "frank",
+    "dense_cos"
+  ],
+  "policy": {
+    "decision_winner": "tuned_global_threshold",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.7000000000000001
+  },
+  "stages": {
+    "0_threshold_0.5_no_exclusivity": {
+      "macro_f05": 0.9768396318336865,
+      "singleton_accuracy": 0.9298146199303813,
+      "n_predicted_pairs": 1509143
+    },
+    "1_threshold_0.5_plus_exclusivity": {
+      "macro_f05": 0.9773011766883096,
+      "singleton_accuracy": 0.9326884157694487,
+      "n_predicted_pairs": 1507646
+    },
+    "2a_tuned_global_threshold": {
+      "macro_f05": 0.9798196844194681,
+      "singleton_accuracy": 0.9622358941147899,
+      "n_predicted_pairs": 1481870,
+      "threshold": 0.7000000000000001
+    },
+    "2b_per_entity_expected_f05": {
+      "macro_f05": 0.9787983882200639,
+      "singleton_accuracy": 0.9230146523111795,
+      "n_predicted_pairs": 1477242
+    },
+    "2b_per_entity_scarcity_exclusivity": {
+      "macro_f05": 0.9787983882200639,
+      "singleton_accuracy": 0.9230146523111795,
+      "n_predicted_pairs": 1477242
+    },
+    "3_final": {
+      "macro_f05": 0.9798196844194681,
+      "singleton_accuracy": 0.9622358941147899,
+      "n_predicted_pairs": 1481870
+    }
+  },
+  "final_macro_f05": 0.9798196844194681,
+  "by_country_frozen_policy": {
+    "India": 0.9769332004572936,
+    "US": 0.9817456538955508
+  },
+  "calibration": {
+    "raw": {
+      "bin_mean_pred": [
+        2.0844774385785274e-07,
+        1.1643416549394554e-06,
+        3.850501368164067e-06,
+        1.1967378734010227e-05,
+        4.0184905746452754e-05,
+        0.00016673321033947827,
+        0.0010098914046509082,
+        0.010851553285725448,
+        0.7151750160937401,
+        0.9999018920259695
+      ],
+      "bin_frac_pos": [
+        0.0,
+        0.0,
+        0.0,
+        4.522502843523663e-06,
+        1.809001137409465e-05,
+        0.00011871556541962561,
+        0.0008366630260518776,
+        0.010132679077182252,
+        0.7165681389856454,
+        0.9999513799610814
+      ],
+      "max_calibration_gap": 0.0013931228919052963,
+      "brier_score": 0.005808212794363499
+    },
+    "calibrated": null,
+    "applied": false
+  },
+  "importance": [
+    [
+      "p",
+      28142669.6
+    ],
+    [
+      "score_B7_dense",
+      864816.9375
+    ],
+    [
+      "dense_cos",
+      755769.35
+    ],
+    [
+      "name_tok_extra_t_idf",
+      413935.5
+    ],
+    [
+      "house_abs_diff",
+      383085.30625
+    ],
+    [
+      "addr_num_jaccard",
+      189543.828125
+    ],
+    [
+      "margin_to_best_competitor",
+      183605.065625
+    ],
+    [
+      "frank",
+      111297.903125
+    ],
+    [
+      "name_tok_extra_q_idf",
+      94579.6046875
+    ],
+    [
+      "sim_full_tset",
+      93244.353125
+    ],
+    [
+      "legal_relation",
+      79747.23125
+    ],
+    [
+      "house_rel_diff",
+      73934.690625
+    ],
+    [
+      "sim_min_tset",
+      72233.2421875
+    ],
+    [
+      "name_tok_extra_t_n",
+      68513.7203125
+    ],
+    [
+      "addr_num_overlap",
+      57947.39140625
+    ],
+    [
+      "house_digit_dropped",
+      56563.49296875
+    ],
+    [
+      "name_tok_overlap_idf",
+      48372.78515625
+    ],
+    [
+      "sim_name_tsort",
+      47401.671875
+    ],
+    [
+      "sim_min_ratio",
+      46516.45859375
+    ],
+    [
+      "n_s1_claiming_record",
+      45507.60625
+    ],
+    [
+      "addr_tok_overlap_idf",
+      41971.1890625
+    ],
+    [
+      "sim_name_char3",
+      41000.5546875
+    ],
+    [
+      "sim_name_jw",
+      38231.78203125
+    ],
+    [
+      "addr_tok_extra_t_idf",
+      29473.13125
+    ],
+    [
+      "addr_tok_extra_q_idf",
+      28852.185546875
+    ],
+    [
+      "house_state",
+      27020.98125
+    ],
+    [
+      "sim_name_partial",
+      26882.40703125
+    ],
+    [
+      "sim_name_tset",
+      25597.870703125
+    ],
+    [
+      "name_min_exact",
+      25291.9953125
+    ],
+    [
+      "score_B1_name_min",
+      24670.28125
+    ],
+    [
+      "rank_within_s1_src",
+      23868.775
+    ],
+    [
+      "score_B1_name_concat",
+      23334.566015625
+    ],
+    [
+      "score_B1_house_token",
+      22566.7453125
+    ],
+    [
+      "rank_B7_dense",
+      22353.997265625
+    ],
+    [
+      "name_tok_overlap_n",
+      21404.9921875
+    ],
+    [
+      "sim_name_ratio",
+      20441.0203125
+    ],
+    [
+      "rank_B5_name_addr",
+      19470.19609375
+    ],
+    [
+      "region_state",
+      19384.871484375
+    ],
+    [
+      "addr_tok_overlap_n",
+      19035.170703125
+    ],
+    [
+      "name_tok_extra_q_n",
+      19001.724609375
+    ]
+  ],
+  "total_s": 648.3
+}

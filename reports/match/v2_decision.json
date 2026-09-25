@@ -1,0 +1,37 @@
+{
+  "policy": {
+    "decision_winner": "tuned_global_threshold",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.72
+  },
+  "by_country_frozen_policy": {
+    "India": 0.9769404570759346,
+    "US": 0.981774806432896
+  },
+  "stages": {
+    "0_threshold_0.5_no_exclusivity": 0.9768396318336865,
+    "1_threshold_0.5_plus_exclusivity": 0.9773011766883096,
+    "2a_tuned_global_threshold": 0.979840074093626,
+    "2b_per_entity_expected_f05": 0.9787983882200639,
+    "2c_exact_expected_f05": 0.978982328927655,
+    "2b_per_entity_scarcity_exclusivity": 0.9787983882200639,
+    "3_final": 0.979840074093626
+  },
+  "nested_threshold": {
+    "macro_f05": 0.9798057624299337,
+    "thresholds": [
+      0.72,
+      0.72,
+      0.72,
+      0.72,
+      0.7
+    ],
+    "per_fold": [
+      0.9797785697834861,
+      0.9798887522168596,
+      0.9795585553001402,
+      0.9804275131260475,
+      0.9793766725000325
+    ]
+  }
+}

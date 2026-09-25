@@ -126,6 +126,7 @@ def submit(name: str = "v2") -> dict:
         del df
         gc.collect()
     scored = pl.concat(parts)
+    scored.write_parquet(io.ARTIFACTS / "match" / f"test_scored_{name}.parquet", mkdir=True)  # for diagnostics
     preds = _policy_predict(scored, bundle["policy"])
 
     test_ids = pl.concat(uni.chunks)

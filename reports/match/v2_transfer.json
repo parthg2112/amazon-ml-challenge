@@ -1,0 +1,24 @@
+[
+  {
+    "holdout": "India",
+    "auc": 0.9970360241950428,
+    "pr_auc": 0.9888759898333912,
+    "macro_f05_frozen_policy": 0.9440799181342809,
+    "policy": {
+      "decision_winner": "tuned_global_threshold",
+      "exclusivity_winner": "max_probability",
+      "threshold": 0.75
+    }
+  },
+  {
+    "holdout": "US",
+    "auc": 0.9983202143562773,
+    "pr_auc": 0.99417484318968,
+    "macro_f05_frozen_policy": 0.9682590285233614,
+    "policy": {
+      "decision_winner": "tuned_global_threshold",
+      "exclusivity_winner": "max_probability",
+      "threshold": 0.73
+    }
+  }
+]
