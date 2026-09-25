@@ -129,14 +129,14 @@ def submit(name: str = "v2", parts: int | None = None) -> dict:
     gctx = uni.global_context(parts)
     feats = bundle["features"]
     block = {"models": bundle["models"], "iso": bundle["iso"]}
-    parts = []
+    frames = []
     for i in range(len(uni.chunks)):
         df = uni.features(i, None, gctx)
-        parts.append(df.select("s1_id", "target_id", "src").with_columns(
+        frames.append(df.select("s1_id", "target_id", "src").with_columns(
             pl.Series("p", _score(block, train.matrix(df, feats)))))
         del df
         gc.collect()
-    scored = pl.concat(parts)
+    scored = pl.concat(frames)
     scored.write_parquet(io.ARTIFACTS / "match" / f"test_scored_{name}_p{parts}.parquet", mkdir=True)  # for diagnostics
     preds = _policy_predict(scored, bundle["policy"])
 
