@@ -1,0 +1,56 @@
+{
+  "val": [
+    {
+      "q_country": "India",
+      "n_sure": 204219,
+      "sure_precision": 0.9685729535449689,
+      "accept_rate": 0.9671969797129553
+    },
+    {
+      "q_country": "US",
+      "n_sure": 373212,
+      "sure_precision": 0.9976260141688906,
+      "accept_rate": 0.9976367319378798
+    }
+  ],
+  "test_profile": [
+    {
+      "q_country": "France",
+      "n_s1": 259452,
+      "empty_rate": 0.06406965450256695,
+      "links_per_s1": 3.076021768959191
+    },
+    {
+      "q_country": "India",
+      "n_s1": 809986,
+      "empty_rate": 0.05828495801161995,
+      "links_per_s1": 3.2741405407007034
+    },
+    {
+      "q_country": "US",
+      "n_s1": 663106,
+      "empty_rate": 0.057756980030342055,
+      "links_per_s1": 3.3278902618887476
+    }
+  ],
+  "test_sure": [
+    {
+      "q_country": "France",
+      "n_sure": 517601,
+      "sure_per_s1": 1.9949778764472812,
+      "accept_rate": 0.9918566617916117
+    },
+    {
+      "q_country": "India",
+      "n_sure": 960395,
+      "sure_per_s1": 1.1856933329711872,
+      "accept_rate": 0.9367624779387648
+    },
+    {
+      "q_country": "US",
+      "n_sure": 932896,
+      "sure_per_s1": 1.4068580287314547,
+      "accept_rate": 0.9948579477240764
+    }
+  ]
+}

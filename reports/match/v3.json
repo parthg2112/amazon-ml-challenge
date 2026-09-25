@@ -1,0 +1,370 @@
+{
+  "name": "v3",
+  "config": "configs/blocking/b_v9.toml",
+  "k": 10,
+  "scope": "val",
+  "backend": "xgb_gpu",
+  "val_pairs": 8844660,
+  "pos_rate": 0.17276119149859914,
+  "features": [
+    "sim_name_ratio",
+    "sim_name_tset",
+    "sim_name_tsort",
+    "sim_name_partial",
+    "sim_name_jw",
+    "sim_full_tset",
+    "sim_addr_ratio",
+    "sim_addr_tset",
+    "sim_city_ratio",
+    "sim_min_tset",
+    "sim_min_ratio",
+    "sim_name_char3",
+    "sim_addr_char3",
+    "name_tok_overlap_n",
+    "name_tok_overlap_idf",
+    "name_tok_rare_overlap_n",
+    "name_tok_extra_q_n",
+    "name_tok_extra_q_idf",
+    "name_tok_extra_t_n",
+    "name_tok_extra_t_idf",
+    "addr_tok_overlap_n",
+    "addr_tok_overlap_idf",
+    "addr_tok_rare_overlap_n",
+    "addr_tok_extra_q_n",
+    "addr_tok_extra_q_idf",
+    "addr_tok_extra_t_n",
+    "addr_tok_extra_t_idf",
+    "landmark_tok_overlap_n",
+    "landmark_tok_overlap_idf",
+    "landmark_tok_rare_overlap_n",
+    "landmark_tok_extra_q_n",
+    "landmark_tok_extra_q_idf",
+    "landmark_tok_extra_t_n",
+    "landmark_tok_extra_t_idf",
+    "name_core_exact",
+    "alias_match",
+    "script_mismatch",
+    "q_name_native_f",
+    "t_name_native_f",
+    "legal_relation",
+    "house_state",
+    "house_abs_diff",
+    "house_rel_diff",
+    "region_state",
+    "postal_state",
+    "locality_state",
+    "unit_state",
+    "both_addr_empty",
+    "either_addr_empty",
+    "addr_num_overlap",
+    "addr_num_jaccard",
+    "same_country",
+    "is_s3",
+    "rank_within_s1_src",
+    "rank_by_name",
+    "rank_by_addr",
+    "n_cands_same_src",
+    "n_cands_total",
+    "n_s1_claiming_record",
+    "margin_to_best_competitor",
+    "support_opposite_src_best",
+    "house_digit_dropped",
+    "house_digit_changed",
+    "name_min_exact",
+    "name_noise_only_diff",
+    "rank_B1_name_concat",
+    "rank_B1_name_fold",
+    "rank_B1_house_token",
+    "rank_B2_name_word",
+    "rank_B4_addr_char",
+    "rank_B5_name_addr",
+    "rank_B7_dense",
+    "rank_B1_name_min",
+    "score_B1_name_concat",
+    "score_B1_name_fold",
+    "score_B1_house_token",
+    "score_B2_name_word",
+    "score_B4_addr_char",
+    "score_B5_name_addr",
+    "score_B7_dense",
+    "score_B1_name_min",
+    "n_channels",
+    "best_rank",
+    "p",
+    "frank",
+    "dense_cos",
+    "gap_p",
+    "gapsrc_p",
+    "z_p",
+    "gap_dense_cos",
+    "gapsrc_dense_cos",
+    "z_dense_cos",
+    "gap_sim_full_tset",
+    "gapsrc_sim_full_tset",
+    "z_sim_full_tset",
+    "gap_sim_min_tset",
+    "gapsrc_sim_min_tset",
+    "z_sim_min_tset",
+    "gap_sim_name_tset",
+    "gapsrc_sim_name_tset",
+    "z_sim_name_tset",
+    "gap_sim_addr_tset",
+    "gapsrc_sim_addr_tset",
+    "z_sim_addr_tset",
+    "gap_sim_name_char3",
+    "gapsrc_sim_name_char3",
+    "z_sim_name_char3",
+    "gap_sim_addr_char3",
+    "gapsrc_sim_addr_char3",
+    "z_sim_addr_char3",
+    "gap_name_tok_overlap_idf",
+    "gapsrc_name_tok_overlap_idf",
+    "z_name_tok_overlap_idf",
+    "gap_addr_num_jaccard",
+    "gapsrc_addr_num_jaccard",
+    "z_addr_num_jaccard"
+  ],
+  "policy": {
+    "decision_winner": "tuned_global_threshold",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.69
+  },
+  "stages": {
+    "0_threshold_0.5_no_exclusivity": {
+      "macro_f05": 0.9785142337446474,
+      "singleton_accuracy": 0.9532906986157209,
+      "n_predicted_pairs": 1509839
+    },
+    "1_threshold_0.5_plus_exclusivity": {
+      "macro_f05": 0.9789103985440825,
+      "singleton_accuracy": 0.9547883105318546,
+      "n_predicted_pairs": 1508479
+    },
+    "2a_tuned_global_threshold": {
+      "macro_f05": 0.9807759169230382,
+      "singleton_accuracy": 0.9736906014733263,
+      "n_predicted_pairs": 1485912,
+      "threshold": 0.69
+    },
+    "2b_per_entity_expected_f05": {
+      "macro_f05": 0.9806250067966853,
+      "singleton_accuracy": 0.9493645268355865,
+      "n_predicted_pairs": 1480191
+    },
+    "2c_exact_expected_f05": {
+      "macro_f05": 0.9806760365386069,
+      "singleton_accuracy": 0.9523192746701206,
+      "n_predicted_pairs": 1478491
+    },
+    "2b_per_entity_scarcity_exclusivity": {
+      "macro_f05": 0.9806250067966853,
+      "singleton_accuracy": 0.9493645268355865,
+      "n_predicted_pairs": 1480191
+    },
+    "3_final": {
+      "macro_f05": 0.9807759169230382,
+      "singleton_accuracy": 0.9736906014733263,
+      "n_predicted_pairs": 1485912
+    }
+  },
+  "final_macro_f05": 0.9807759169230382,
+  "by_country_frozen_policy": {
+    "India": 0.9781813009534087,
+    "US": 0.9825071412170749
+  },
+  "calibration": {
+    "raw": {
+      "bin_mean_pred": [
+        1.7368647229460095e-07,
+        1.052307740524153e-06,
+        3.6865042977376166e-06,
+        1.1614813353055248e-05,
+        3.863819817715654e-05,
+        0.0001547104572677358,
+        0.0009158009743755682,
+        0.009960116790192151,
+        0.7159019557532212,
+        0.9999059972243068
+      ],
+      "bin_frac_pos": [
+        0.0,
+        0.0,
+        0.0,
+        3.391877132642747e-06,
+        2.0351262795856483e-05,
+        0.00010401744779624338,
+        0.0007643038446970767,
+        0.009386454651733362,
+        0.717396440873988,
+        0.9999615553789113
+      ],
+      "max_calibration_gap": 0.0014944851207667753,
+      "brier_score": 0.00546905305236578
+    },
+    "calibrated": null,
+    "applied": false
+  },
+  "importance": [
+    [
+      "p",
+      28135618.8
+    ],
+    [
+      "z_p",
+      1686511.85
+    ],
+    [
+      "name_tok_extra_t_idf",
+      375929.2375
+    ],
+    [
+      "house_abs_diff",
+      298131.86875
+    ],
+    [
+      "margin_to_best_competitor",
+      170076.14375
+    ],
+    [
+      "z_dense_cos",
+      153101.234375
+    ],
+    [
+      "addr_num_jaccard",
+      123760.575
+    ],
+    [
+      "gapsrc_addr_num_jaccard",
+      79087.6
+    ],
+    [
+      "house_rel_diff",
+      68634.5515625
+    ],
+    [
+      "legal_relation",
+      66557.11328125
+    ],
+    [
+      "name_tok_extra_q_idf",
+      60961.20703125
+    ],
+    [
+      "name_tok_extra_t_n",
+      59886.215625
+    ],
+    [
+      "gap_p",
+      59285.1984375
+    ],
+    [
+      "addr_num_overlap",
+      58234.38515625
+    ],
+    [
+      "sim_full_tset",
+      56032.30390625
+    ],
+    [
+      "gapsrc_p",
+      54763.41328125
+    ],
+    [
+      "z_addr_num_jaccard",
+      53324.82890625
+    ],
+    [
+      "house_digit_dropped",
+      50680.16171875
+    ],
+    [
+      "z_sim_addr_char3",
+      48582.321875
+    ],
+    [
+      "score_B7_dense",
+      40184.2640625
+    ],
+    [
+      "sim_min_tset",
+      39280.509375
+    ],
+    [
+      "sim_min_ratio",
+      37420.22734375
+    ],
+    [
+      "z_sim_full_tset",
+      37339.1015625
+    ],
+    [
+      "sim_name_tsort",
+      37310.28125
+    ],
+    [
+      "n_s1_claiming_record",
+      35584.5875
+    ],
+    [
+      "name_tok_overlap_idf",
+      35105.8984375
+    ],
+    [
+      "dense_cos",
+      32083.324609375
+    ],
+    [
+      "z_name_tok_overlap_idf",
+      31343.763671875
+    ],
+    [
+      "addr_tok_overlap_idf",
+      30031.1390625
+    ],
+    [
+      "gap_name_tok_overlap_idf",
+      28689.494921875
+    ],
+    [
+      "sim_name_jw",
+      28499.89921875
+    ],
+    [
+      "addr_tok_extra_t_idf",
+      24336.65234375
+    ],
+    [
+      "z_sim_addr_tset",
+      24180.50625
+    ],
+    [
+      "addr_tok_extra_q_idf",
+      24097.39765625
+    ],
+    [
+      "name_min_exact",
+      22439.1828125
+    ],
+    [
+      "z_sim_min_tset",
+      21479.608984375
+    ],
+    [
+      "gap_sim_full_tset",
+      21174.037109375
+    ],
+    [
+      "sim_name_partial",
+      20299.358984375
+    ],
+    [
+      "name_tok_overlap_n",
+      19399.872265625
+    ],
+    [
+      "sim_name_char3",
+      18773.197265625
+    ]
+  ],
+  "total_s": 389.5
+}
