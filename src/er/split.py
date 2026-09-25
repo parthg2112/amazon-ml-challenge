@@ -10,6 +10,7 @@ SEED = "er-v1-2026-09-25"
 VALIDATION_PERCENT = 20
 DEV_PERCENT = 10  # share of validation used for fast iteration
 RANKER_BASIS_POINTS = 200  # 2% of all S1 (train fold only) to fit the stage-2 candidate ranker
+CV_FOLDS = 5  # grouped folds (by s1_id) for the Step 4 match classifier, train subset only
 
 
 def stable_bucket(entity_id: str, seed: str, domain: str, modulus: int) -> int:
@@ -22,13 +23,17 @@ def assign_split(s1_ids: pl.Series, seed: str = SEED) -> pl.DataFrame:
     val = [stable_bucket(i, seed, "validation", 100) < VALIDATION_PERCENT for i in ids]
     dev = [stable_bucket(i, seed, "benchmark", 10_000) < DEV_PERCENT * 100 for i in ids]
     rk = [stable_bucket(i, seed, "ranker", 10_000) < RANKER_BASIS_POINTS for i in ids]
-    return pl.DataFrame({"s1_id": ids, "is_val": val, "is_dev": dev, "is_rtrain": rk}).with_columns(
+    cv = [stable_bucket(i, seed, "cv5", CV_FOLDS) for i in ids]
+    return pl.DataFrame(
+        {"s1_id": ids, "is_val": val, "is_dev": dev, "is_rtrain": rk, "cv_fold": cv}
+    ).with_columns(
         pl.when(~pl.col("is_val"))
         .then(pl.lit("train"))
         .when(pl.col("is_dev"))
         .then(pl.lit("dev"))
         .otherwise(pl.lit("val"))
-        .alias("fold")
+        .alias("fold"),
+        pl.col("cv_fold").cast(pl.Int8),
     )
 
 
@@ -38,7 +43,7 @@ def load_split() -> pl.DataFrame:
     path = io.DATA / "split.parquet"
     if path.exists():
         df = pl.read_parquet(path)
-        if "is_rtrain" in df.columns:
+        if "cv_fold" in df.columns:
             return df
     df = assign_split(io.load_truth()["s1_id"])
     df.write_parquet(path)

@@ -112,7 +112,7 @@ def train_ranker(cfg: dict):
     df = ranker.build(cands, channels, queries, ctx.all_targets)
     y = ranker.label(df, io.load_truth().filter(pl.col("s1_id").is_in(ids.implode())))
     model = ranker.fit(df, y, feats)
-    return model, feats, channels, {"train_pairs": int(len(y)), "pos_rate": float(y.mean())}
+    return model, feats, channels, {"train_pairs": len(y), "pos_rate": float(y.mean())}
 
 
 def _chunks(ids: pl.Series, size: int):
@@ -230,6 +230,55 @@ def infer(config_path: str, k: int, out_dir: Path) -> dict:
     }
     (io.REPORTS / "test_blocking.json").write_text(json.dumps(stats, indent=2, default=str))
     return stats
+
+
+def _match_pool(split: str, norm_cfg: NormConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Full-column normalized S1/target pools for match features — `Context` only loads the blocking
+    ranker's narrower `PAIR_COLS`, which is missing several columns `er.match.features` needs."""
+    from er.match.features import JOIN_COLS
+
+    cols = ["entity_id", *JOIN_COLS]
+    s1 = load_norm(split, "S1", norm_cfg).select(cols)
+    targets = pl.concat([load_norm(split, src, norm_cfg).select(cols) for src in io.TARGET_SOURCES])
+    return s1, targets
+
+
+def collect_match_features(config_path: str, subset: str, k: int) -> tuple[pl.DataFrame, list[str]]:
+    """Step 4 input: blocking ranker's per-S1 shortlist, with channel provenance and match features.
+
+    Chunked like `run`/`infer` so this scales to the full train fold. Returns (features_df, extra_feature_cols)
+    where extra_feature_cols are the blocking-stage columns (channel provenance + ranker probability) to
+    add to `er.match.features.NUMERIC_FEATURES`.
+    """
+    from er.blocking import ranker
+    from er.match import features
+    from er.match.idf import build_word_idf
+
+    cfg = tomllib.loads(Path(config_path).read_text(encoding="utf-8"))
+    model, feats, channels, _meta = train_ranker(cfg)
+    ctx = Context(cfg, "train")
+    match_s1, match_targets = _match_pool("train", ctx.norm)
+    name_idf = build_word_idf(match_targets, "name_core")
+    addr_idf = build_word_idf(match_targets, "addr_content")
+
+    ids = subset_ids(load_split(), subset)
+    parts, timings = [], {}
+    extra: list[str] | None = None
+    for chunk in _chunks(ids, cfg.get("chunk", CHUNK)):
+        cands, queries = ctx.collect(chunk, subset, timings)
+        ranked = ranker.rank_by_model(ranker.build(cands, channels, queries, ctx.all_targets), model, feats)
+        keep = ranked.filter(pl.col("frank") <= k).select("s1_id", "target_id", "src", "p", "frank")
+        filtered = cands.join(keep.select("s1_id", "target_id"), on=["s1_id", "target_id"], how="semi")
+        pairs = ranker.provenance(filtered, channels).join(keep, on=["s1_id", "target_id", "src"], how="left")
+        if extra is None:
+            # Computed from the blocking-stage frame, before features.build() adds its own rank_by_*/
+            # rank_within_s1_src columns — those would otherwise collide with this prefix match.
+            extra = [c for c in pairs.columns if c.startswith(("rank_", "score_"))
+                     or c in ("n_channels", "best_rank", "p")]
+        match_queries = match_s1.filter(pl.col("entity_id").is_in(chunk.implode()))
+        parts.append(features.build(pairs, match_queries, match_targets, name_idf, addr_idf))
+    df = pl.concat(parts, how="diagonal_relaxed")
+    return df, extra or []
 
 
 def leaderboard() -> str:

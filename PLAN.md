@@ -92,8 +92,14 @@ Chosen shortlist: **K=10 per source (20 candidates per S1)**. It is above the 95
 
 `uv run er infer configs/blocking/b_v3.toml --k 10` trains the ranker on train and blocks all 1.73M test S1 against the test S2/S3 pools, France included. It writes `output/candidate_pairs.tsv` and a placeholder all-empty `output/matching_results.tsv`, which `student_resource/utils/validate_submission.py` accepts. TEST_RESULTS
 
-## 7. Next (Step 4 hooks)
+## 7. Step 4: features and model (validated end to end on real dev data)
 
-- Pair features reuse `er.blocking.ranker.pair_features`. Step 4 adds a stronger classifier and cardinality-aware output selection per S1 to maximize expected F0.5.
-- The ranker probability is already a calibrated-ish match score. Use it as a feature, not as the decision.
-- Mine more N4 tables: abbreviation and noise tokens (`center`, `service`) at lower support. Keep only those with measured gain.
+`uv run er match configs/blocking/b_v3.toml --subset dev` shortlists candidates with the Step 3 ranker (`--k` per source), builds match features, fits LightGBM over 5 grouped (by `s1_id`) folds via `er.split.load_split()`'s `cv_fold` column, calibrates if needed, and writes `reports/match/{metrics.json,calibration.png,gate_report.md}`.
+
+- `src/er/match/features.py`: similarity-only pair features (never raw country labels or token identities) — name (ratio/token-set/token-sort/partial/Jaro-Winkler/char-3gram cosine/IDF-weighted token overlap/core-exact/alias-DBA-domain-translit flag/script flag/legal same-compatible-conflicting-missing), address (street content ratio+token-set+char-3gram, region/postal/house tri-state, house abs/relative numeric diff, number-set overlap, emptiness flags), context (rank by name/address within the S1, margin to the best competing S1 for the same target, count of S1s claiming a record, opposite-source sibling support), and pair metadata (S2/S3 flag, candidate counts, blocking-channel provenance via `ranker.provenance`).
+- `src/er/match/idf.py`: exact (unhashed) word-level IDF over the target pool, used for the token-overlap features.
+- `src/er/match/train.py`: `cv_train` (LightGBM, numpy arrays + categorical-feature indices, no pandas dependency), `maybe_calibrate` (isotonic, applied only if the raw reliability-curve gap exceeds 0.05), `evaluate` (AUC/PR-AUC/macro F0.5 at threshold 0.5, overall and per country), `country_holdout_check` (leave-one-country-out — the France stand-in, same pattern as the Step 2 leave-profile-out check).
+- `src/er/match/report.py`: renders the gate report (metrics table, calibration plot, feature importance, holdout-country gap).
+- `normalize/address.py` now also extracts `addr_city`, `addr_unit`, and `addr_landmark` (city from the segment preceding the region, or the "POSTAL CITY" convention for France; unit from apt/ste/suite/unit/fl/floor markers; landmark from tokens following near/opp/behind/opposite). This is additive only — `addr_content`/`addr_house`/`addr_region`/`addr_numbers`/`addr_postal` are computed identically to before, so the already-measured Step 2/3 numbers in this document stay reproducible; only `addr_norm`'s downstream consumers gain three new columns. Match features use them for `sim_city_ratio`, `locality_state`, `unit_state`, and landmark token overlap.
+- Run on the real dev subset (44,535 S1, `configs/blocking/b_v2.toml`, no dense channel — CUDA unavailable on this machine): OOF AUC 0.9989, PR-AUC 0.9953, macro F0.5 at threshold 0.5 = 0.9633 (US 0.9691, India 0.9545). `write_oof()` persists the OOF frame to `reports/match/oof.parquet` for the Step 5 decision layer to consume.
+
