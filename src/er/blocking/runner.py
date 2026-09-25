@@ -145,7 +145,32 @@ def precut(cands: pl.DataFrame, cfg: dict) -> pl.DataFrame:
     return cands.join(keep, on=["s1_id", "target_id"], how="semi")
 
 
+def ranker_cache_path(cfg: dict) -> Path:
+    from er.normalize.pipeline import norm_path
+
+    norm = NormConfig(**cfg.get("norm", {}))
+    stamps = [norm_path("train", s, norm).stat().st_mtime_ns for s in io.SOURCES]
+    blob = json.dumps([CHANNEL_CACHE_VERSION, cfg["channels"], cfg.get("ranker", {}), cfg.get("norm", {}),
+                       cfg.get("chunk", CHUNK), stamps], sort_keys=True)
+    return io.ARTIFACTS / "cache" / "ranker" / f"{hashlib.sha1(blob.encode()).hexdigest()[:20]}.pkl"
+
+
 def train_ranker(cfg: dict, ctx: Context | None = None):
+    """Cached wrapper: the ranker is a deterministic function of config + normalized inputs."""
+    import pickle
+
+    path = ranker_cache_path(cfg)
+    if path.exists():
+        return pickle.loads(path.read_bytes())
+    out = _train_ranker(cfg, ctx)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".partial")
+    tmp.write_bytes(pickle.dumps(out))
+    tmp.replace(path)
+    return out
+
+
+def _train_ranker(cfg: dict, ctx: Context | None = None):
     """Fit the stage-2 ranker on a train-fold S1 sample against the TRAIN target pool.
 
     Chunked; keeps every positive and a deterministic `neg_rate` share of negatives to bound memory.

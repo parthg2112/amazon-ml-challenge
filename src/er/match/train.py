@@ -37,7 +37,7 @@ def cv_train(df: pl.DataFrame, y: np.ndarray, fold_col: str, feature_names: list
     import lightgbm as lgb
 
     params = {**DEFAULT_PARAMS, **(params or {})}
-    X = df.select(feature_names).to_numpy()
+    X = matrix(df, feature_names)
     cat_idx = [feature_names.index(c) for c in categorical if c in feature_names]
     fold_arr = df[fold_col].to_numpy()
     oof = np.zeros(len(y), dtype=np.float32)
@@ -55,6 +55,16 @@ def cv_train(df: pl.DataFrame, y: np.ndarray, fold_col: str, feature_names: list
         models.append(booster)
         importances.append(booster.feature_importance(importance_type="gain"))
     return oof, models, np.mean(importances, axis=0)
+
+
+def matrix(df: pl.DataFrame, feature_names: list[str]) -> np.ndarray:
+    """float32 (lossless for these features) halves memory vs the default float64 at 9M x 120."""
+    return df.select(pl.col(feature_names).cast(pl.Float32)).to_numpy()
+
+
+def predict_mean(models: list, X: np.ndarray) -> np.ndarray:
+    """Average of the CV fold models (review M2): the same models the OOF calibration/threshold saw."""
+    return np.mean([m.predict(X, num_iteration=m.best_iteration) for m in models], axis=0)
 
 
 def train_full(df: pl.DataFrame, y: np.ndarray, feature_names: list[str], categorical: list[str],

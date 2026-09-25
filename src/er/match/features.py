@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 from rapidfuzz import fuzz
-from rapidfuzz.distance import JaroWinkler
+from rapidfuzz.distance import JaroWinkler, Levenshtein
 from rapidfuzz.process import cpdist
 from sklearn.preprocessing import normalize
 
@@ -19,7 +19,7 @@ from er.match.idf import WordIdf, token_overlap_features
 JOIN_COLS = [
     "name_native", "name_full", "name_core", "name_legal", "name_concat", "name_fold", "name_alts",
     "name_domain", "addr_content", "addr_region", "addr_house", "addr_numbers", "addr_postal",
-    "addr_city", "addr_unit", "addr_landmark", "addr_empty", "country",
+    "addr_city", "addr_unit", "addr_landmark", "addr_empty", "country", "name_min", "name_min_key",
 ]
 
 SIMS = [
@@ -32,6 +32,8 @@ SIMS = [
     ("sim_addr_ratio", "addr_content", fuzz.ratio),
     ("sim_addr_tset", "addr_content", fuzz.token_set_ratio),
     ("sim_city_ratio", "addr_city", fuzz.ratio),
+    ("sim_min_tset", "name_min", fuzz.token_set_ratio),
+    ("sim_min_ratio", "name_min", fuzz.ratio),
 ]
 
 # Coarse ownership-form buckets, used only to derive a same/compatible/conflicting relation code —
@@ -88,42 +90,66 @@ def _legal_relation() -> pl.Expr:
     ).cast(pl.Int8).alias("legal_relation")
 
 
-def _add_context_features(df: pl.DataFrame, score_col: str) -> pl.DataFrame:
-    """Rank/margin/support among the S1's own candidate set — cheap cross-candidate signal."""
+CTX_SCORE = "_ctx_score"  # (name token-set + address token-set) / 2: the score competitors are compared on
+
+
+def add_local_context(df: pl.DataFrame, score_col: str = CTX_SCORE) -> pl.DataFrame:
+    """Rank/count/support within the S1's own candidate set: needs only that S1's rows."""
     df = df.with_columns(
         pl.col(score_col).rank("ordinal", descending=True).over("s1_id", "src").alias("rank_within_s1_src"),
         pl.col("sim_name_tset").rank("ordinal", descending=True).over("s1_id", "src").alias("rank_by_name"),
         pl.col("sim_addr_tset").rank("ordinal", descending=True).over("s1_id", "src").alias("rank_by_addr"),
         pl.len().over("s1_id", "src").alias("n_cands_same_src"),
         pl.len().over("s1_id").alias("n_cands_total"),
-        pl.col("s1_id").n_unique().over("target_id").alias("n_s1_claiming_record"),
     )
-    top2 = df.select("target_id", "s1_id", score_col).sort(score_col, descending=True).group_by(
-        "target_id", maintain_order=True).head(2)
-    agg = top2.group_by("target_id").agg(
-        pl.col("s1_id").first().alias("_top_s1"),
-        pl.col(score_col).first().alias("_top_score"),
-        pl.col(score_col).get(1, null_on_oob=True).alias("_second_score"),
-    )
-    df = df.join(agg, on="target_id", how="left")
-    competitor_best = pl.when(pl.col("s1_id") == pl.col("_top_s1")).then(
-        pl.col("_second_score").fill_null(0.0)).otherwise(pl.col("_top_score"))
-    df = df.with_columns((pl.col(score_col) - competitor_best).alias("margin_to_best_competitor"))
-
     per_s1_src = df.group_by("s1_id", "src").agg(pl.col(score_col).max().alias("_max"))
     wide = per_s1_src.pivot(on="src", index="s1_id", values="_max")
     for src in ("S2", "S3"):
         if src not in wide.columns:
             wide = wide.with_columns(pl.lit(0.0).alias(src))
-    df = df.join(wide, on="s1_id", how="left")
+    df = df.join(wide.select("s1_id", "S2", "S3"), on="s1_id", how="left")
     support = pl.when(pl.col("src") == "S2").then(pl.col("S3")).otherwise(pl.col("S2")).fill_null(0.0)
-    df = df.with_columns(support.alias("support_opposite_src_best"))
-    return df.drop("_top_s1", "_top_score", "_second_score", "S2", "S3")
+    # fixed dtype: a chunk with no S3 candidates would otherwise yield Float64 and break concatenation
+    return df.with_columns(support.cast(pl.Float32).alias("support_opposite_src_best")).drop("S2", "S3")
+
+
+def global_context(slim: pl.DataFrame, score_col: str = CTX_SCORE) -> pl.DataFrame:
+    """Cross-S1 competition per target, over whatever universe `slim` covers (s1_id, target_id, score).
+
+    Must be computed over the full S1 universe the model will face (review M1), not per chunk.
+    """
+    slim = slim.select("s1_id", "target_id", score_col)
+    top2 = slim.sort([score_col, "s1_id"], descending=[True, False]).group_by("target_id", maintain_order=True).head(2)
+    agg = top2.group_by("target_id").agg(
+        pl.col("s1_id").first().alias("_top_s1"),
+        pl.col(score_col).first().alias("_top_score"),
+        pl.col(score_col).get(1, null_on_oob=True).alias("_second_score"),
+    )
+    claims = slim.group_by("target_id").agg(pl.col("s1_id").n_unique().alias("n_s1_claiming_record"))
+    out = slim.join(agg, on="target_id", how="left").join(claims, on="target_id", how="left")
+    competitor_best = pl.when(pl.col("s1_id") == pl.col("_top_s1")).then(
+        pl.col("_second_score").fill_null(0.0)).otherwise(pl.col("_top_score"))
+    return out.select("s1_id", "target_id", "n_s1_claiming_record",
+                      (pl.col(score_col) - competitor_best).alias("margin_to_best_competitor"))
+
+
+def _add_context_features(df: pl.DataFrame, score_col: str) -> pl.DataFrame:
+    """Local + global context over the rows present (single-universe path, used by `build`)."""
+    df = add_local_context(df, score_col)
+    return df.join(global_context(df, score_col), on=["s1_id", "target_id"], how="left")
 
 
 def build(pairs: pl.DataFrame, queries: pl.DataFrame, targets: pl.DataFrame, name_idf: WordIdf,
          addr_idf: WordIdf) -> pl.DataFrame:
-    """pairs: s1_id, target_id [, any pass-through columns e.g. blocking rank/score/channel/p]."""
+    """pairs: s1_id, target_id [, pass-through columns]. Context is computed over these rows only."""
+    df = build_local(pairs, queries, targets, name_idf, addr_idf)
+    df = df.join(global_context(df), on=["s1_id", "target_id"], how="left")
+    return df.drop(CTX_SCORE)
+
+
+def build_local(pairs: pl.DataFrame, queries: pl.DataFrame, targets: pl.DataFrame, name_idf: WordIdf,
+                addr_idf: WordIdf) -> pl.DataFrame:
+    """All features except the cross-S1 ones (see `global_context`); keeps `CTX_SCORE` for them."""
     df = _join(pairs, queries, targets)
 
     for name, col, scorer in SIMS:
@@ -186,11 +212,24 @@ def build(pairs: pl.DataFrame, queries: pl.DataFrame, targets: pl.DataFrame, nam
         (pl.col("src") == "S3").cast(pl.Int8).alias("is_s3"),
     )
 
+    # Noise-catalogue flags (reports/noise/): digit dropped / changed vs a genuinely different number;
+    # names that differ only by generator noise (inserted words, honorifics, legal variants, homoglyphs).
+    ha, hb = df["q_addr_house"].fill_null("").to_list(), df["t_addr_house"].fill_null("").to_list()
+    lev = pl.Series("_house_lev", cpdist(ha, hb, scorer=Levenshtein.distance, workers=-1, dtype=np.int32))
+    df = df.with_columns(lev)
+    len_a, len_b = pl.col("q_addr_house").str.len_chars(), pl.col("t_addr_house").str.len_chars()
     df = df.with_columns(
-        ((pl.col("sim_name_tset") + pl.col("sim_addr_tset")) / 2).alias("_ctx_score")
-    )
-    df = _add_context_features(df, "_ctx_score")
-    return df.drop("_ctx_score")
+        (house_known & (pl.col("_house_lev") == 1) & ((len_a - len_b).abs() == 1)).cast(pl.Int8)
+        .alias("house_digit_dropped"),
+        (house_known & (pl.col("_house_lev") == 1) & (len_a == len_b)).cast(pl.Int8).alias("house_digit_changed"),
+        ((pl.col("q_name_min_key") == pl.col("t_name_min_key")) & (pl.col("q_name_min_key") != ""))
+        .cast(pl.Int8).alias("name_min_exact"),
+        ((pl.col("q_name_min_key") == pl.col("t_name_min_key")) & (pl.col("q_name_min_key") != "") & ~core_exact)
+        .cast(pl.Int8).alias("name_noise_only_diff"),
+    ).drop("_house_lev")
+
+    df = df.with_columns(((pl.col("sim_name_tset") + pl.col("sim_addr_tset")) / 2).alias(CTX_SCORE))
+    return add_local_context(df)
 
 
 NUMERIC_FEATURES = (
@@ -203,7 +242,8 @@ NUMERIC_FEATURES = (
        "postal_state", "locality_state", "unit_state", "both_addr_empty", "either_addr_empty",
        "addr_num_overlap", "addr_num_jaccard", "same_country", "is_s3", "rank_within_s1_src",
        "rank_by_name", "rank_by_addr", "n_cands_same_src", "n_cands_total", "n_s1_claiming_record",
-       "margin_to_best_competitor", "support_opposite_src_best"]
+       "margin_to_best_competitor", "support_opposite_src_best", "house_digit_dropped", "house_digit_changed",
+       "name_min_exact", "name_noise_only_diff"]
 )
 CATEGORICAL_FEATURES = ["legal_relation", "house_state", "region_state", "postal_state", "locality_state",
                         "unit_state"]

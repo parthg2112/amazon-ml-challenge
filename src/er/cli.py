@@ -155,6 +155,20 @@ def cmd_finetune(args: argparse.Namespace) -> None:
             embed_source(split, src, model=str(out))
 
 
+def cmd_fit2(args: argparse.Namespace) -> None:
+    from er.match import v2
+
+    r = v2.fit(args.config, args.k, args.name, transfer=not args.no_transfer)
+    keep = ("final_macro_f05", "by_country_frozen_policy", "policy", "country_transfer", "total_s")
+    print(json.dumps({k: r.get(k) for k in keep}, indent=2, default=str))
+
+
+def cmd_submit2(args: argparse.Namespace) -> None:
+    from er.match import v2
+
+    print(json.dumps(v2.submit(args.name), indent=2, default=str))
+
+
 def cmd_leaderboard(args: argparse.Namespace) -> None:
     from er.blocking.runner import leaderboard
 
@@ -253,6 +267,17 @@ def main() -> None:
     sp.add_argument("--lr", type=float, default=5e-5)
     sp.add_argument("--embed", nargs="*", default=["train"], help="splits to re-embed with the new model")
     sp.set_defaults(fn=cmd_finetune)
+
+    sp = sub.add_parser("fit2", help="Step 4/5 v2: universe shortlists, val features, CV, policy, transfer")
+    sp.add_argument("config")
+    sp.add_argument("--k", type=int, default=10)
+    sp.add_argument("--name", default="v2")
+    sp.add_argument("--no-transfer", action="store_true", help="skip the leave-country-out transfer check")
+    sp.set_defaults(fn=cmd_fit2)
+
+    sp = sub.add_parser("submit2", help="score the test universe with a fit2 bundle; write both TSVs")
+    sp.add_argument("--name", default="v2")
+    sp.set_defaults(fn=cmd_submit2)
 
     sp = sub.add_parser("leaderboard", help="rebuild reports/leaderboard.md")
     sp.set_defaults(fn=cmd_leaderboard)

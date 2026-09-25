@@ -76,3 +76,43 @@ def test_token_overlap_features_counts():
     assert out["tok_overlap_n"][0] == 2  # hines, liberty
     assert out["tok_extra_q_n"][0] == 1  # produce
     assert out["tok_extra_t_n"][0] == 1  # imports
+
+
+def test_chunked_local_plus_global_context_equals_single_universe():
+    from er.match.features import CTX_SCORE, build_local, global_context
+
+    queries = norm_df([
+        ("S1-1", "Acme Tools", "1 Main St", "US"),
+        ("S1-2", "Acme Bolts", "1 Main St", "US"),
+        ("S1-3", "Zenith Foods", "9 Oak Ave", "US"),
+    ])
+    targets = norm_df([("S2-1", "Acme Tools", "1 Main St", "US"), ("S3-1", "Zenith Foods Inc", "9 Oak Ave", "US")])
+    pairs = pl.DataFrame({"s1_id": ["S1-1", "S1-2", "S1-3", "S1-2"], "target_id": ["S2-1", "S2-1", "S3-1", "S3-1"]})
+    name_idf = build_word_idf(targets, "name_core")
+    addr_idf = build_word_idf(targets, "addr_content")
+    whole = build(pairs, queries, targets, name_idf, addr_idf).sort("s1_id", "target_id")
+
+    # competitors S1-1/S1-2 land in different chunks: per-chunk context would miss the competition
+    chunks = [pairs.filter(pl.col("s1_id") == "S1-1"), pairs.filter(pl.col("s1_id") != "S1-1")]
+    local = pl.concat([build_local(c, queries, targets, name_idf, addr_idf) for c in chunks])
+    ctx = global_context(local.select("s1_id", "target_id", CTX_SCORE))
+    chunked = local.join(ctx, on=["s1_id", "target_id"]).drop(CTX_SCORE).sort("s1_id", "target_id")
+
+    for col in ("n_s1_claiming_record", "margin_to_best_competitor", "rank_within_s1_src", "sim_min_tset"):
+        assert chunked[col].to_list() == whole[col].to_list(), col
+    assert whole.filter(pl.col("target_id") == "S2-1")["n_s1_claiming_record"].to_list() == [2, 2]
+
+
+def test_noise_flags():
+    queries = norm_df([("S1-1", "Harbor Services LLC", "24221 Kittson Blvd", "US")])
+    targets = norm_df([
+        ("S2-1", "Harbor Foundation Services", "2422 KITTSON BLVD", "US"),  # digit dropped, noise-only name
+        ("S2-2", "Harbor LLC", "24251 Kittson Blvd", "US"),                  # digit changed
+    ])
+    pairs = pl.DataFrame({"s1_id": ["S1-1", "S1-1"], "target_id": ["S2-1", "S2-2"]})
+    df = build(pairs, queries, targets, build_word_idf(targets, "name_core"),
+               build_word_idf(targets, "addr_content")).sort("target_id")
+    r1, r2 = df.row(0, named=True), df.row(1, named=True)
+    assert r1["house_digit_dropped"] == 1 and r1["house_digit_changed"] == 0
+    assert r1["name_min_exact"] == 1 and r1["name_noise_only_diff"] == 1
+    assert r2["house_digit_changed"] == 1 and r2["house_digit_dropped"] == 0
