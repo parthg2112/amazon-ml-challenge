@@ -1,0 +1,487 @@
+{
+  "n_pairs": 890700,
+  "pos_rate": 0.1709239923655552,
+  "n_folds": 5,
+  "features": [
+    "sim_name_ratio",
+    "sim_name_tset",
+    "sim_name_tsort",
+    "sim_name_partial",
+    "sim_name_jw",
+    "sim_full_tset",
+    "sim_addr_ratio",
+    "sim_addr_tset",
+    "sim_city_ratio",
+    "sim_name_char3",
+    "sim_addr_char3",
+    "name_tok_overlap_n",
+    "name_tok_overlap_idf",
+    "name_tok_rare_overlap_n",
+    "name_tok_extra_q_n",
+    "name_tok_extra_q_idf",
+    "name_tok_extra_t_n",
+    "name_tok_extra_t_idf",
+    "addr_tok_overlap_n",
+    "addr_tok_overlap_idf",
+    "addr_tok_rare_overlap_n",
+    "addr_tok_extra_q_n",
+    "addr_tok_extra_q_idf",
+    "addr_tok_extra_t_n",
+    "addr_tok_extra_t_idf",
+    "landmark_tok_overlap_n",
+    "landmark_tok_overlap_idf",
+    "landmark_tok_rare_overlap_n",
+    "landmark_tok_extra_q_n",
+    "landmark_tok_extra_q_idf",
+    "landmark_tok_extra_t_n",
+    "landmark_tok_extra_t_idf",
+    "name_core_exact",
+    "alias_match",
+    "script_mismatch",
+    "q_name_native_f",
+    "t_name_native_f",
+    "legal_relation",
+    "house_state",
+    "house_abs_diff",
+    "house_rel_diff",
+    "region_state",
+    "postal_state",
+    "locality_state",
+    "unit_state",
+    "both_addr_empty",
+    "either_addr_empty",
+    "addr_num_overlap",
+    "addr_num_jaccard",
+    "same_country",
+    "is_s3",
+    "rank_within_s1_src",
+    "rank_by_name",
+    "rank_by_addr",
+    "n_cands_same_src",
+    "n_cands_total",
+    "n_s1_claiming_record",
+    "margin_to_best_competitor",
+    "support_opposite_src_best",
+    "rank_B1_name_concat",
+    "rank_B1_name_fold",
+    "rank_B1_house_token",
+    "rank_B2_name_word",
+    "rank_B4_addr_char",
+    "rank_B5_name_addr",
+    "score_B1_name_concat",
+    "score_B1_name_fold",
+    "score_B1_house_token",
+    "score_B2_name_word",
+    "score_B4_addr_char",
+    "score_B5_name_addr",
+    "n_channels",
+    "best_rank",
+    "p"
+  ],
+  "categorical_features": [
+    "legal_relation",
+    "house_state",
+    "region_state",
+    "postal_state",
+    "locality_state",
+    "unit_state"
+  ],
+  "metrics": {
+    "auc": 0.9988626004962774,
+    "pr_auc": 0.9953285547778694,
+    "macro_f05_at_threshold": 0.9632755238384749,
+    "threshold": 0.5,
+    "n_pairs": 890700,
+    "pos_rate": 0.1709239923655552,
+    "by_country": {
+      "India": {
+        "auc": 0.9985101116468419,
+        "pr_auc": 0.993797497825124,
+        "macro_f05_at_threshold": 0.9544991098212027,
+        "threshold": 0.5,
+        "n_pairs": 353360,
+        "pos_rate": 0.17005320353180892
+      },
+      "US": {
+        "auc": 0.9990634339749686,
+        "pr_auc": 0.9961802012759524,
+        "macro_f05_at_threshold": 0.9690469788895474,
+        "threshold": 0.5,
+        "n_pairs": 537340,
+        "pos_rate": 0.17149663155543976
+      }
+    }
+  },
+  "calibration": {
+    "raw": {
+      "bin_mean_pred": [
+        6.606634014533989e-06,
+        2.2105146869300958e-05,
+        5.104123505339121e-05,
+        0.00011210286359246328,
+        0.0002651532924396926,
+        0.0007668140157386718,
+        0.003485169098436725,
+        0.040080182697861115,
+        0.7817861179421248,
+        0.99980494253989
+      ],
+      "bin_frac_pos": [
+        0.0,
+        0.0,
+        0.0,
+        1.1227124733355788e-05,
+        2.2454249466711576e-05,
+        0.00013472549680026944,
+        0.0007522173571348378,
+        0.011934433591557202,
+        0.6965869540810599,
+        0.9997979117547996
+      ],
+      "max_calibration_gap": 0.08519916386106496,
+      "brier_score": 0.009554346092045307
+    },
+    "calibrated": {
+      "bin_mean_pred": [
+        0.0,
+        1.3878611436893217e-05,
+        3.22737507894437e-05,
+        0.00014054792543747007,
+        0.0008297502605451367,
+        0.012359603804852414,
+        0.7224017667325962,
+        0.9998905523587949
+      ],
+      "bin_frac_pos": [
+        0.0,
+        1.7722326587034347e-05,
+        2.9147720648245306e-05,
+        0.00013645441802190715,
+        0.0008187895374399928,
+        0.012374413735833168,
+        0.7224127662196299,
+        0.9998761717250517
+      ],
+      "max_calibration_gap": 1.4809930980753602e-05,
+      "brier_score": 0.007637111470103264
+    },
+    "applied": true
+  },
+  "country_holdout": {
+    "holdout_country": "India",
+    "leave_country_out": {
+      "auc": 0.9929503875317609,
+      "pr_auc": 0.974643314686713,
+      "macro_f05_at_threshold": 0.8323026631166921,
+      "threshold": 0.5,
+      "n_pairs": 353360,
+      "pos_rate": 0.17005320353180892
+    },
+    "in_distribution": {
+      "auc": 0.9985101116468419,
+      "pr_auc": 0.993797497825124,
+      "macro_f05_at_threshold": 0.9544991098212027,
+      "threshold": 0.5,
+      "n_pairs": 353360,
+      "pos_rate": 0.17005320353180892
+    }
+  },
+  "feature_importance": [
+    [
+      "p",
+      8635881.604117442
+    ],
+    [
+      "margin_to_best_competitor",
+      845386.067323494
+    ],
+    [
+      "name_tok_extra_t_idf",
+      342770.9214339733
+    ],
+    [
+      "addr_num_jaccard",
+      285471.3804116249
+    ],
+    [
+      "n_channels",
+      228182.1082312584
+    ],
+    [
+      "house_abs_diff",
+      149428.5579114914
+    ],
+    [
+      "name_tok_extra_t_n",
+      126941.2748380661
+    ],
+    [
+      "score_B5_name_addr",
+      86274.07732515335
+    ],
+    [
+      "sim_full_tset",
+      80335.43689393997
+    ],
+    [
+      "sim_name_jw",
+      76686.57772574425
+    ],
+    [
+      "name_tok_overlap_idf",
+      69787.5880604744
+    ],
+    [
+      "addr_tok_overlap_idf",
+      51370.48433465957
+    ],
+    [
+      "name_tok_extra_q_idf",
+      50804.21364741326
+    ],
+    [
+      "score_B1_name_concat",
+      48781.059618663785
+    ],
+    [
+      "rank_B5_name_addr",
+      47788.09312729836
+    ],
+    [
+      "sim_name_partial",
+      47604.19618444443
+    ],
+    [
+      "legal_relation",
+      46746.63820171356
+    ],
+    [
+      "house_rel_diff",
+      43867.212732744214
+    ],
+    [
+      "sim_name_char3",
+      43258.71849808693
+    ],
+    [
+      "addr_tok_extra_t_idf",
+      35525.92296700478
+    ],
+    [
+      "addr_tok_extra_q_idf",
+      33259.58820443154
+    ],
+    [
+      "sim_name_ratio",
+      33032.98748497963
+    ],
+    [
+      "rank_within_s1_src",
+      30217.00994286537
+    ],
+    [
+      "rank_B4_addr_char",
+      28630.063473796843
+    ],
+    [
+      "addr_tok_extra_t_n",
+      25326.403545045854
+    ],
+    [
+      "addr_num_overlap",
+      24698.733854913713
+    ],
+    [
+      "sim_addr_char3",
+      23917.23105182648
+    ],
+    [
+      "sim_name_tsort",
+      23144.986835956573
+    ],
+    [
+      "sim_name_tset",
+      21351.653672742843
+    ],
+    [
+      "score_B1_name_fold",
+      19859.73247022629
+    ],
+    [
+      "score_B1_house_token",
+      19004.724579143523
+    ],
+    [
+      "rank_by_name",
+      17726.944707489012
+    ],
+    [
+      "score_B4_addr_char",
+      17723.250625896453
+    ],
+    [
+      "name_tok_extra_q_n",
+      17258.75450515747
+    ],
+    [
+      "best_rank",
+      17149.17798538208
+    ],
+    [
+      "house_state",
+      14668.957402038573
+    ],
+    [
+      "rank_by_addr",
+      14622.992131423951
+    ],
+    [
+      "n_s1_claiming_record",
+      13625.30909357071
+    ],
+    [
+      "name_tok_overlap_n",
+      13429.644044589997
+    ],
+    [
+      "support_opposite_src_best",
+      13161.808865356445
+    ],
+    [
+      "sim_addr_ratio",
+      11746.721973228454
+    ],
+    [
+      "script_mismatch",
+      10118.69515581131
+    ],
+    [
+      "score_B2_name_word",
+      9380.70230793953
+    ],
+    [
+      "addr_tok_overlap_n",
+      8906.080718612671
+    ],
+    [
+      "sim_addr_tset",
+      8711.136479091645
+    ],
+    [
+      "addr_tok_extra_q_n",
+      7020.3993560314175
+    ],
+    [
+      "sim_city_ratio",
+      6157.087871837616
+    ],
+    [
+      "rank_B2_name_word",
+      4832.900805568695
+    ],
+    [
+      "locality_state",
+      4202.130694580078
+    ],
+    [
+      "alias_match",
+      2955.9626623153686
+    ],
+    [
+      "landmark_tok_extra_q_idf",
+      2720.581958818436
+    ],
+    [
+      "is_s3",
+      2151.7361846923827
+    ],
+    [
+      "region_state",
+      2022.6942710876465
+    ],
+    [
+      "rank_B1_house_token",
+      1962.7680500984193
+    ],
+    [
+      "t_name_native_f",
+      1395.7653113365172
+    ],
+    [
+      "landmark_tok_overlap_idf",
+      1237.8982577323914
+    ],
+    [
+      "rank_B1_name_concat",
+      1008.5087408065796
+    ],
+    [
+      "rank_B1_name_fold",
+      711.9021368026733
+    ],
+    [
+      "same_country",
+      698.7211681365967
+    ],
+    [
+      "landmark_tok_extra_q_n",
+      625.4028706550598
+    ],
+    [
+      "unit_state",
+      483.7876742362976
+    ],
+    [
+      "landmark_tok_extra_t_n",
+      445.934459066391
+    ],
+    [
+      "landmark_tok_overlap_n",
+      161.19778575897217
+    ],
+    [
+      "either_addr_empty",
+      148.50225410461425
+    ],
+    [
+      "landmark_tok_extra_t_idf",
+      65.43001384735108
+    ],
+    [
+      "name_core_exact",
+      56.05415992736816
+    ],
+    [
+      "name_tok_rare_overlap_n",
+      0.0
+    ],
+    [
+      "addr_tok_rare_overlap_n",
+      0.0
+    ],
+    [
+      "landmark_tok_rare_overlap_n",
+      0.0
+    ],
+    [
+      "q_name_native_f",
+      0.0
+    ],
+    [
+      "postal_state",
+      0.0
+    ],
+    [
+      "both_addr_empty",
+      0.0
+    ],
+    [
+      "n_cands_same_src",
+      0.0
+    ],
+    [
+      "n_cands_total",
+      0.0
+    ]
+  ]
+}

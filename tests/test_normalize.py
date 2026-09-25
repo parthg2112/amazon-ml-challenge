@@ -73,6 +73,20 @@ def test_open_set_country():
     assert rec("x", "Chennai, TN", "India", NormConfig(profile_mode="generic"))["addr_region"] == ""
 
 
+def test_city_unit_landmark():
+    assert rec("x", "1361 Norby Rd, Jamestown, New York")["addr_city"] == "jamestown"
+    assert rec("x", "797, Lake Town, Kolkata, West Bengal 700089", "India")["addr_city"] == "kolkata"
+    assert rec("x", "10 Rue X, 59000 LILLE", "France")["addr_city"] == "lille"
+    assert rec("x", "123 Main St Apt 4B, Springfield, IL")["addr_unit"] == "4b"
+    assert rec("x", "123 Main St, Springfield, IL")["addr_unit"] == ""
+    assert rec("x", "Near Big Bazaar, MG Road, Bangalore", "India")["addr_landmark"] == "big bazaar"
+    assert rec("x", "MG Road, Bangalore", "India")["addr_landmark"] == ""
+    # additive: addr_content/addr_house/addr_region/addr_postal stay exactly as before (Step 2/3 parity)
+    a = rec("x", "1286 1/2 KENTS RIDGE RD, RICHLANDS TOWN, VA")
+    assert a["addr_content"] == "kents ridge richlands town"
+    assert a["addr_house"] == "1286"
+
+
 def test_native_translit_fold():
     r = rec("आनंद कंसल्टेंट्स प्राइवेट लिमिटेड", country="India")
     assert r["name_native"] and "ltd" in r["name_legal"]  # praivet→pvt comes from learned N4 map

@@ -57,7 +57,8 @@ SCHEMA = {
     "name_legal": pl.Utf8, "name_sorted": pl.Utf8, "name_concat": pl.Utf8, "name_fold": pl.Utf8,
     "name_alts": pl.List(pl.Utf8), "name_domain": pl.Boolean, "addr_norm": pl.Utf8,
     "addr_content": pl.Utf8, "addr_region": pl.Utf8, "addr_house": pl.Utf8,
-    "addr_numbers": pl.List(pl.Utf8), "addr_postal": pl.Utf8, "addr_empty": pl.Boolean,
+    "addr_numbers": pl.List(pl.Utf8), "addr_postal": pl.Utf8, "addr_city": pl.Utf8,
+    "addr_unit": pl.Utf8, "addr_landmark": pl.Utf8, "addr_empty": pl.Boolean,
 }
 
 

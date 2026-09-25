@@ -161,6 +161,20 @@ def cmd_leaderboard(args: argparse.Namespace) -> None:
     print(leaderboard())
 
 
+def cmd_match(args: argparse.Namespace) -> None:
+    from er.blocking.runner import collect_match_features
+    from er.match import report, train
+    from er.split import load_split
+
+    df, extra = collect_match_features(args.config, args.subset, args.k)
+    truth = io.load_truth()
+    folds = load_split()
+    result = train.fit_and_report(df, extra, truth, folds, holdout_country=args.holdout_country)
+    written = report.write(result)
+    print(json.dumps(written["metrics"], indent=2, default=str))
+    print(f"gate report -> {report.REPORT_DIR / 'gate_report.md'}")
+
+
 def cmd_learn(args: argparse.Namespace) -> None:
     from er.normalize.learned import mine
 
@@ -219,6 +233,13 @@ def main() -> None:
 
     sp = sub.add_parser("leaderboard", help="rebuild reports/leaderboard.md")
     sp.set_defaults(fn=cmd_leaderboard)
+
+    sp = sub.add_parser("match", help="Step 4: candidate features + LightGBM classifier + gate report")
+    sp.add_argument("config", help="blocking config (channels + ranker) to shortlist candidates with")
+    sp.add_argument("--subset", default="dev", choices=["dev", "val", "train"])
+    sp.add_argument("--k", type=int, default=10, help="ranker budget per target source")
+    sp.add_argument("--holdout-country", default="India", help="country left out for the France stand-in check")
+    sp.set_defaults(fn=cmd_match)
 
     sp = sub.add_parser("learn", help="mine N4 alias tables from train-fold pairs")
     sp.add_argument("--name", default="n4_v1")
