@@ -120,6 +120,27 @@ FEATURE_GROUPS: dict[str, set[str]] = {
                 "n_cands_total", "support_opposite_src_best"},
 }
 
+# Group masking (GM): training-only, whole groups set missing per S1 so the fit cannot route everything through
+# one learned score (v7 gain: p + z_p 55M vs 2.4M for the next feature). Patterns are fnmatch; the per-S1
+# relative views of every matched column (gap_/gapsrc_/z_ prefixes, _rel/_rk suffixes) are masked with it.
+MASK_GROUPS: dict[str, tuple[str, ...]] = {
+    "ranker": ("p", "frank", "best_rank", "n_channels", "ng_p_rank", "ng_p_gap", "rank_B*", "score_B*"),
+    "dense": ("dense_cos",),
+    "geo": tuple(sorted(FEATURE_GROUPS["geo"])),
+    "script": tuple(sorted(FEATURE_GROUPS["script"])),
+}
+
+
+def mask_columns(feats: list[str], group: str) -> list[int]:
+    """Indexes into `feats` of the group's columns plus their relative views."""
+    from fnmatch import fnmatchcase
+
+    if group not in MASK_GROUPS:
+        raise ValueError(f"unknown mask group {group!r}; known: {sorted(MASK_GROUPS)}")
+    base = {f for f in feats if any(fnmatchcase(f, pat) for pat in MASK_GROUPS[group])}
+    views = {v for b in base for v in (f"gap_{b}", f"gapsrc_{b}", f"z_{b}", f"{b}_rel", f"{b}_rk")}
+    return [i for i, f in enumerate(feats) if f in base | views]
+
 
 def apply_drop_groups(feats: list[str], drop_groups: list[str] | tuple[str, ...] | None) -> list[str]:
     """Remove the named feature groups; `idf`-style pattern groups are handled explicitly if ever needed."""

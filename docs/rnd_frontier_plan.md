@@ -40,13 +40,13 @@ before building anything; the rest summarizes the research plan as received.
 |---|---|---|---|---|---|---|
 | 1 | F0 CE band rescoring | decision | +0.0010 | 0.7 | 1.5 | Done: val +0.0013 (tanh), paired LB check pending |
 | 2 | EXR renormalization | decision | +0.0005 | 0.5 | 1 | Done: val +0.0002 on top of CE band |
-| 3 | KPM per-country Σp matching (+ per-country tilt) | decision + proxy | +0.0006 | 0.35 | 1.5 | Proxy scores being produced (`er.match.proxy`) |
+| 3 | KPM per-country Σp matching (+ per-country tilt) | decision + proxy | +0.0006 | 0.35 | 1.5 | Done: India proxy +0.0027 alone / +0.0004 on band+EXR; in v7 test (France 3.16 → 3.27 links/S1) |
 | 4 | SC sibling-consensus band rescorer | decision | +0.0004 | 0.4 | 2 | Measured +0.00018 val / +0.00012 proxy |
-| 5 | GM group masking + list-free legal equality | refit | +0.0003 | 0.35 | 2.5 | Refit arm, after macro-aware weights |
+| 5 | GM group masking + list-free legal equality | refit | +0.0003 | 0.35 | 2.5 | Masking implemented (`--mask-groups`), gate via `er proxy` arms, run pending. List-free legal **rejected** on real data: N1 lists already cover France (61.6% of FR targets vs ~60% legal-form share), and pool-frequent edge tokens discriminate far worse on same-name val pairs ('differ' 28%/43% true vs legal_relation 5%/0.01%, US/India). Macro-aware weights rejected (v6w 0.98193 vs v6 0.98224) |
 | 6 | DA-CE domain-adversarial CE | CE train | +0.0005 | 0.3 | 3 | Later |
 | 7 | F2 class-conditional feature alignment | refit | +0.0010 | 0.2 | 4 | Later |
 | — | SIM test-faithful val simulator | tool | gatekeeper | — | 1.5 | Optional |
-| 8 | FU full-universe competition context | re-block + refit | +0.0008 | 0.35 | 6 | Later |
+| 8 | FU full-universe competition context | re-block + refit | +0.0008 | 0.35 | 6 | Done: v7 (`fit2 --train-scope full`), OOF 0.98287 |
 | 9 | AFJ S1–S1 reference-table negatives | feature | +0.0006 | 0.3 | 5 | Later |
 
 ## Bayes ceilings
