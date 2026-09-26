@@ -110,6 +110,28 @@ def add_relative(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(exprs)
 
 
+# Feature groups whose removal was tested for country transfer (reports/match/ablate_transfer_v3.json).
+# `legal` hurt transfer most (+0.0038 India held out when dropped); `idf`/`ranker` help transfer, keep them.
+FEATURE_GROUPS: dict[str, set[str]] = {
+    "geo": {"region_state", "postal_state", "locality_state", "unit_state", "sim_city_ratio"},
+    "script": {"script_mismatch", "q_name_native_f", "t_name_native_f", "alias_match"},
+    "legal": {"legal_relation"},
+    "context": {"n_s1_claiming_record", "margin_to_best_competitor", "n_cands_same_src",
+                "n_cands_total", "support_opposite_src_best"},
+}
+
+
+def apply_drop_groups(feats: list[str], drop_groups: list[str] | tuple[str, ...] | None) -> list[str]:
+    """Remove the named feature groups; `idf`-style pattern groups are handled explicitly if ever needed."""
+    if not drop_groups:
+        return feats
+    dropped = set().union(*(FEATURE_GROUPS[g] for g in drop_groups))
+    missing = set(drop_groups) - set(FEATURE_GROUPS)
+    if missing:
+        raise ValueError(f"unknown feature group(s): {sorted(missing)}")
+    return [f for f in feats if f not in dropped]
+
+
 def add_local_context(df: pl.DataFrame, score_col: str = CTX_SCORE) -> pl.DataFrame:
     """Rank/count/support within the S1's own candidate set: needs only that S1's rows."""
     df = df.with_columns(
@@ -246,6 +268,17 @@ def build_local(pairs: pl.DataFrame, queries: pl.DataFrame, targets: pl.DataFram
     ).drop("_house_lev")
 
     df = df.with_columns(((pl.col("sim_name_tset") + pl.col("sim_addr_tset")) / 2).alias(CTX_SCORE))
+
+    # Pool-level name ambiguity (Step 7): how many pool records share each side's name key.
+    # 61% of FN / 35% of FP have an empty address on one side and ~half are same-name pairs;
+    # a unique name makes a same-name pair near-certain, a 50x-shared name makes it ambiguous.
+    sup = targets.group_by("name_min_key").len()
+    df = (df.join(sup.rename({"len": "t_name_support"}), left_on="t_name_min_key",
+                  right_on="name_min_key", how="left")
+            .join(sup.rename({"len": "q_name_support"}), left_on="q_name_min_key",
+                  right_on="name_min_key", how="left")
+            .with_columns(pl.col("t_name_support").fill_null(0).log1p().alias("t_name_support"),
+                          pl.col("q_name_support").fill_null(0).log1p().alias("q_name_support")))
     return add_local_context(df)
 
 
@@ -260,7 +293,7 @@ NUMERIC_FEATURES = (
        "addr_num_overlap", "addr_num_jaccard", "same_country", "is_s3", "rank_within_s1_src",
        "rank_by_name", "rank_by_addr", "n_cands_same_src", "n_cands_total", "n_s1_claiming_record",
        "margin_to_best_competitor", "support_opposite_src_best", "house_digit_dropped", "house_digit_changed",
-       "name_min_exact", "name_noise_only_diff"]
+       "name_min_exact", "name_noise_only_diff", "t_name_support", "q_name_support"]
 )
 CATEGORICAL_FEATURES = ["legal_relation", "house_state", "region_state", "postal_state", "locality_state",
                         "unit_state"]

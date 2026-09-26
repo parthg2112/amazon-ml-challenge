@@ -17,6 +17,7 @@ dependencies = [
     "lightgbm>=4.5",
     "matplotlib>=3.9",
     "xgboost>=2.1",
+    "optuna>=5.0.0",
 ]
 
 [project.optional-dependencies]

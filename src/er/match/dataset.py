@@ -27,7 +27,7 @@ from er.match.idf import build_word_idf
 from er.split import load_split, subset_ids
 
 SHORTLIST_VERSION = 1  # bump when pass-1 logic changes
-FEATURE_VERSION = 1  # bump when pass-2 features change
+FEATURE_VERSION = 2  # bump when pass-2 features change (v2: +t_name_support/q_name_support)
 CACHE = io.ARTIFACTS / "cache" / "match"
 
 

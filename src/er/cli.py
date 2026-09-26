@@ -10,6 +10,7 @@ import time
 import polars as pl
 
 from er import io
+from er.match import features
 from er.metrics import macro_f05
 from er.split import SEED
 
@@ -158,7 +159,8 @@ def cmd_finetune(args: argparse.Namespace) -> None:
 def cmd_fit2(args: argparse.Namespace) -> None:
     from er.match import v2
 
-    r = v2.fit(args.config, args.k, args.name, transfer=args.transfer, scope=args.scope, backend=args.backend)
+    r = v2.fit(args.config, args.k, args.name, transfer=args.transfer, scope=args.scope,
+               backend=args.backend, drop_groups=tuple(args.drop_groups))
     keep = ("final_macro_f05", "by_country_frozen_policy", "policy", "country_transfer", "total_s")
     print(json.dumps({k: r.get(k) for k in keep}, indent=2, default=str))
 
@@ -188,7 +190,8 @@ def cmd_tune(args: argparse.Namespace) -> None:
     from er.match import tune
 
     r = tune.run(args.config, args.k, args.scope, args.backend, args.trials, args.frac,
-                 not args.no_monotone, args.name)
+                 not args.no_monotone, args.name, relative=not args.no_relative,
+                 drop_groups=tuple(args.drop_groups))
     print(json.dumps({k: r[k] for k in ("subsample_scores", "best_params", "full_frame_macro_f05",
                                         "seconds")}, indent=2, default=str))
 
@@ -320,6 +323,8 @@ def main() -> None:
     sp.add_argument("--k", type=int, default=10)
     sp.add_argument("--name", default="v2")
     sp.add_argument("--transfer", action="store_true", help="also run leave-country-out transfer checks")
+    sp.add_argument("--drop-groups", nargs="*", default=[], choices=sorted(features.FEATURE_GROUPS),
+                    help="feature groups to drop for the transfer ablation (see features.FEATURE_GROUPS)")
     sp.add_argument("--scope", default="val", choices=["val", "full"], help="competitor universe for context")
     sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "lgbm"])
     sp.set_defaults(fn=cmd_fit2)
@@ -351,6 +356,9 @@ def main() -> None:
     sp.add_argument("--trials", type=int, default=30)
     sp.add_argument("--frac", type=float, default=0.3, help="fraction of S1 each trial fits on")
     sp.add_argument("--no-monotone", action="store_true", help="disable monotone constraints")
+    sp.add_argument("--no-relative", action="store_true", help="exclude REL_FEATURES (tune the pre-v3 set)")
+    sp.add_argument("--drop-groups", nargs="*", default=[], choices=sorted(features.FEATURE_GROUPS),
+                    help="feature groups to drop (see features.FEATURE_GROUPS)")
     sp.set_defaults(fn=cmd_tune)
 
     sp = sub.add_parser("crossenc", help="area 1: fine-tune the Ditto-style cross-encoder on train-fold pairs")

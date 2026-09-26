@@ -108,7 +108,8 @@ def subsample_s1(df: pl.DataFrame, y: np.ndarray, frac: float, seed: int = 0):
 
 
 def run(config_path: str, k: int = 10, scope: str = "val", backend: str = "xgb_gpu", trials: int = 30,
-       frac: float = 0.3, monotone: bool = True, name: str = "tune") -> dict:
+        frac: float = 0.3, monotone: bool = True, name: str = "tune", relative: bool = True,
+        drop_groups: tuple[str, ...] = ()) -> dict:
     import optuna
 
     uni = Universe(config_path, "train", k, scope)
@@ -118,6 +119,10 @@ def run(config_path: str, k: int = 10, scope: str = "val", backend: str = "xgb_g
     y = ranker.label(df, truth)
     df = df.join(load_split().select("s1_id", "cv_fold"), on="s1_id", how="left")
     feats = features.NUMERIC_FEATURES + uni.extra_features()
+    if relative:
+        df = features.add_relative(df)
+        feats = feats + features.REL_FEATURES
+    feats = features.apply_drop_groups(feats, drop_groups)
     sub_df, sub_y = subsample_s1(df, y, frac)
     print(f"search on {sub_df.height:,} of {df.height:,} pairs, {len(feats)} features", flush=True)
 

@@ -82,7 +82,7 @@ def country_transfer(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: p
 
 
 def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False, scope: str = "val",
-        backend: str = "xgb_gpu", relative: bool = True) -> dict:
+        backend: str = "xgb_gpu", relative: bool = True, drop_groups: tuple[str, ...] = ()) -> dict:
     t0 = time.perf_counter()
     uni = Universe(config_path, "train", k, scope)
     uni.shortlists()
@@ -94,7 +94,9 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
     if relative:
         df = features.add_relative(df)
         feats = feats + features.REL_FEATURES
-    print(f"val pairs {df.height:,}, pos rate {y.mean():.4f}, {len(feats)} features", flush=True)
+    feats = features.apply_drop_groups(feats, drop_groups)
+    print(f"val pairs {df.height:,}, pos rate {y.mean():.4f}, {len(feats)} features, "
+          f"dropped groups {list(drop_groups) or 'none'}", flush=True)
 
     t_cv = time.perf_counter()
     block = _fit_block(df, y, feats, truth, backend)
@@ -107,7 +109,8 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
     result = {
         "name": name, "config": config_path, "k": k, "scope": scope, "backend": backend,
         "val_pairs": df.height, "pos_rate": float(y.mean()),
-        "features": feats, "policy": block["policy"], "stages": block["decision"]["stages"],
+        "features": feats, "drop_groups": list(drop_groups),
+        "policy": block["policy"], "stages": block["decision"]["stages"],
         "final_macro_f05": block["decision"]["final"]["macro_f05"], "by_country_frozen_policy": by_country,
         "calibration": block["calibration"],
         "importance": sorted(zip(feats, block["importance"].tolist()), key=lambda kv: -kv[1])[:40],

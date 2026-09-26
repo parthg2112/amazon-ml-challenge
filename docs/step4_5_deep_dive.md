@@ -207,3 +207,77 @@ matches densities on average; running at full scope removes the need for it.
 3. `er tune configs/blocking/b_v9.toml --trials 30` — cheap, and monotone constraints also help area 2.
 4. `er crossenc …` — largest expected gain, highest cost.
 5. `er fit2 --scope full` — folds in area 5 and drops the M7 approximation.
+
+
+---
+
+## Status after v3/v4 (2026-09-26, GPU runs)
+
+Baseline moved: v3 (relative features) OOF **0.98078**, India held-out **0.9471**, US 0.9825,
+threshold 0.69, leaderboard (v2p4) 0.972899. France measured via the France-empty diagnostic:
+**0.950 +- 0.005** (v1 0.944 -> +0.006 with v2). US+India on test 0.977, only 0.002 below CV.
+
+| Claimed fix | Verdict | Evidence |
+|---|---|---|
+| 1. rel_no_p (drop absolute ranker score, keep relative views) | **REJECTED** | Ablation arm bs_p_only: India held-out 0.9413 vs 0.9471 (-0.0058). The absolute p *helps* transfer; its relative views alone are not enough. The whole ranker group is even more essential: dropping it costs 0.0129. |
+| 2. It is not a threshold problem | **CONFIRMED** | Oracle threshold on India labels recovers only +0.0037 of the 0.033 gap (2_transfer_oracle.json); France's score distribution matches India's shape and its prior curve is flat (rance_scores_v2_p4.json). |
+| 3. prior_matched_threshold (hit 3.46 links/S1) | **REJECTED as a rule** | In-distribution 0.97354 vs 0.98040 (-0.007): F0.5's optimum is ~3.36 links, below the true mean, by design. France's lower link rate is genuine (5.53 targets/S1 vs US/India's 5.8; even t=0.30 reaches only 3.27). Kept only as a label-free fallback in the pipeline, never auto-selected in-distribution. Nuance: the softer prior_tilted_exact_f05 variant DID win in-distribution on v4a/v4b (0.98061/0.98051 vs 0.98040 threshold) and is now auto-selected. |
+| 4. Monotone constraints | **PENDING RUN** | Implemented in 	une.py with per-feature directions (+1 similarities, -1 house diffs/ranks, 0 ambiguous); report splits defaults/monotone_only/est. Run queued on the v4a feature set. |
+| 5. Re-run leave-India-out after every change | **ADOPTED** | All v3/v4 decisions (relative features, cross-encoder, ablation, v4 arms) were decided on India-held-out F0.5, never AUC alone. |
+| Cross-encoder on raw pair text | **REJECTED** | Trained on US only: India AUC 0.978 vs v3's 0.9991 (~10x ranking errors); v3+CE India held-out 0.9419 vs 0.9471. Learns country surface forms; hand-built features transfer better (ce_proxy_us.json). |
+| Feature-group ablation (which groups hurt transfer) | **DONE** | Drop legal_relation (country-specific legal-form lists): India held-out 0.9471 -> **0.9509** (+0.0038). Drop geo +0.0011, script +0.0008. IDF and ranker features help transfer; keep. (blate_transfer_v3.json) |
+| v4a = v3 - legal | **WINNER, submitted** | In-dist 0.98061 (-0.0002), India held-out 0.9509 (+0.0038), net +0.0004. v4b (also -geo -script) is worse: 0.98051 / 0.9506, net +0.0002. (4a.json, 4b.json, 4_transfer.json) |
+| Self-training on pseudo-labels | **REJECTED** | +0.0008 at best; labels 99.5% right but add nothing new (2_selftrain_proxy.json). |
+| France-only threshold | **REJECTED** | Flat prior curve; no cutoff lifts France without adding false positives. |
+
+Protocol notes: India held-out stands in for France (it predicted France 0.944 when the true
+figure was 0.950 - roughly right). The leave-India-out number, not AUC, is the decision metric:
+AUC moves ~0.001 while F0.5 collapses by 0.03 when a feature stops transferring.
+
+---
+
+## Step 7: error analysis on v4a OOF (2026-09-26)
+
+Wrong (FP) = 11,947; missed (FN) = 58,063 of 1,531,442 true links (val scope, threshold 0.69).
+FN split (4a_errors_quant.json):
+
+| Bucket | Count | Share of FN |
+|---|---|---|
+| Never shortlisted (blocking miss) | 3,428 | 6% |
+| Shortlisted, scored < 0.3 (confidently wrong) | 29,097 | 53% |
+| Shortlisted, 0.3-0.69 (near-threshold) | 25,366 | 46% |
+| Scored > 0.69, lost to exclusivity | 172 | <1% |
+| One side has an EMPTY address | 35,371 | **61%** |
+| Same name_min_key on both sides | 24,340 | 42% |
+| Identical name+addr text (ambiguity/labels) | 1,952 | 3% |
+
+FP mirror the pattern: 48% same-name, 35% one-side-empty-address. Text examples
+(4a_errors.json): heavy generator-noise names ("vioonyxaria", "u j talxabe"), Wisconsin-style
+merged house numbers one digit apart, and same-name-different-entity collisions.
+
+Diagnosis: the model has no measure of NAME AMBIGUITY in the pool. A same-name pair with a unique
+name is near-certainly a match; the same name shared by 50 records is not. Trees cannot infer this
+from pair-level features alone.
+
+Fix (v5a): pool-level 	_name_support / q_name_support (log count of target-pool records sharing
+each side's name_min_key, per-split like the IDF tables). FEATURE_VERSION bumped to 2.
+
+Also measured this round:
+- Monotone constraints: **REJECTED** - subsample F0.5 0.97794 -> 0.97085 (-0.007). No France gain
+  (15% of test) recovers that.
+- Optuna hyper-parameters (30 trials, unconstrained): subsample +0.0005 but full-frame 0.98062 vs
+  0.98061 defaults - **no gain, rejected** (	une_v4a.json).
+
+## v5a result: name-support features kept (2026-09-26)
+
+| Metric | v4a | v5a (v4a + t_name_support/q_name_support) | Delta |
+|---|---|---|---|
+| In-distribution OOF | 0.98061 | 0.98138 | +0.0008 |
+| India in-dist / held-out | 0.97784 / 0.9509 | 0.97841 / 0.9502 | +0.0006 / -0.0008 (noise) |
+| US in-dist / held-out | 0.98248 / - | 0.98337 / 0.97093 | +0.0009 |
+
+The Step 7 fix paid in-distribution (US+India) without hurting the France proxy. v5a is the new
+deployment model; submission validated and archived as artifacts/submissions/v5a_*.
+Estimated leaderboard ~0.973-0.974 (v2p4 0.972899 + in-dist gains). Next Step 7 rounds, by
+expected payoff: same-name competitor count within the shortlist, empty-address interaction
+flags, corrupted-name alias tables.

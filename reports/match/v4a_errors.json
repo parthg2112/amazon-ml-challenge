@@ -1,0 +1,298 @@
+{
+  "n_pred": 1485326,
+  "n_truth": 1531442,
+  "n_fp": 11947,
+  "n_fn": 58063,
+  "fp_by_country": {
+    "India": 5956,
+    "US": 5991
+  },
+  "fn_by_country": {
+    "India": 24929,
+    "US": 33134
+  },
+  "fp_examples": [
+    {
+      "q_country": "US",
+      "q_name": "keystone trading technologies",
+      "q_addr": "oakmont glen wendell",
+      "t_name": "keystone trading technologies",
+      "t_addr": "oakmont glen wendell"
+    },
+    {
+      "q_country": "US",
+      "q_name": "strategic star andretti",
+      "q_addr": "gentle rain peoria",
+      "t_name": "strategic sttssr andretti",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "vania cardenas market",
+      "q_addr": "nostrand brooklyn",
+      "t_name": "vania cardenas market",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "red yoga",
+      "q_addr": "n128w16824 holy hill village of germantown",
+      "t_name": "red yoga",
+      "t_addr": "n128w16828 holy hill village of germantown"
+    },
+    {
+      "q_country": "India",
+      "q_name": "bluefox academy",
+      "q_addr": "a2 gala and pashupati kalwar bhiwandi thane thane",
+      "t_name": "bluef0x academy holdings",
+      "t_addr": "a2 thane"
+    },
+    {
+      "q_country": "India",
+      "q_name": "adarsh ventures",
+      "q_addr": "old police chowki chawdi bazar lashkar gwalior rk bhawan",
+      "t_name": "adarsh ventures",
+      "t_addr": "rk bhawan old police chowki chawdi bazar lashkar gwalior"
+    },
+    {
+      "q_country": "US",
+      "q_name": "bailey dental associates",
+      "q_addr": "gensen los lunas",
+      "t_name": "bailey dental associates",
+      "t_addr": ""
+    },
+    {
+      "q_country": "India",
+      "q_name": "indo care",
+      "q_addr": "karnal ward taraori karnal",
+      "t_name": "indo care service",
+      "t_addr": "karnal karnal"
+    },
+    {
+      "q_country": "US",
+      "q_name": "v 5 collective",
+      "q_addr": "creekwood unit moraine",
+      "t_name": "v 5 collective",
+      "t_addr": "creekwood dayton city"
+    },
+    {
+      "q_country": "US",
+      "q_name": "whitners secure cleaning service",
+      "q_addr": "harmon lebanon",
+      "t_name": "whitners secure cleaning service",
+      "t_addr": "harmon lebanon"
+    },
+    {
+      "q_country": "India",
+      "q_name": "raviaya visuals",
+      "q_addr": "smr vinay galaxy hoodi circle itpl ro bangalore north bangalore",
+      "t_name": "raviaora visuals",
+      "t_addr": "bangalore north bangalore"
+    },
+    {
+      "q_country": "US",
+      "q_name": "blue federation ii",
+      "q_addr": "149th omaha",
+      "t_name": "blue federation ik",
+      "t_addr": "149st omaha"
+    },
+    {
+      "q_country": "India",
+      "q_name": "north 24 paraganas fittings",
+      "q_addr": "motilal milan pally sultanpur a1 north paraganas north parganas",
+      "t_name": "north 24 paraganas center",
+      "t_addr": "a1 motilal milan pally sultanpur north paraganas"
+    },
+    {
+      "q_country": "US",
+      "q_name": "fresh auto body",
+      "q_addr": "us_wa",
+      "t_name": "fresh auto body services",
+      "t_addr": "us_wa"
+    },
+    {
+      "q_country": "India",
+      "q_name": "mahuva blanc",
+      "q_addr": "annas school kelarai church neermarga mangalore dakshina kannada",
+      "t_name": "mahuva bmnoarmc",
+      "t_addr": ""
+    },
+    {
+      "q_country": "India",
+      "q_name": "galaxy builders",
+      "q_addr": "surbhi plaza lakdikapool hyderabad",
+      "t_name": "sri galaxy builders",
+      "t_addr": "hyderabad"
+    },
+    {
+      "q_country": "India",
+      "q_name": "international sangh",
+      "q_addr": "ratnagiri 2a and ratnagiri nutan",
+      "t_name": "international sangh",
+      "t_addr": "13a and ratnagiri"
+    },
+    {
+      "q_country": "India",
+      "q_name": "wom india",
+      "q_addr": "amarun bazar ps bhatar purba burdwan burdwan co tanmay hazra bardhaman",
+      "t_name": "wom tehblgoy india",
+      "t_addr": "amarun bazar ps bhatar purba burdwan burdwan co tanmay hazra bardhaman"
+    },
+    {
+      "q_country": "US",
+      "q_name": "u j taxable",
+      "q_addr": "connaught us_de",
+      "t_name": "u j talxabe",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "vanguard heartland towing",
+      "q_addr": "magoffin city of el paso",
+      "t_name": "vanguard heartland towing",
+      "t_addr": ""
+    }
+  ],
+  "fn_examples": [
+    {
+      "q_country": "US",
+      "q_name": "lane services",
+      "q_addr": "belleau twinsburg",
+      "t_name": "lane services",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "nabors stonebridge",
+      "q_addr": "new santa fe",
+      "t_name": "vioonyxaria",
+      "t_addr": "new santa fe"
+    },
+    {
+      "q_country": "India",
+      "q_name": "shreema soft",
+      "q_addr": "appejay mumbai samachar kala ghoda fort mumbai mumbai city",
+      "t_name": "shreema center",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "dermatology bay center",
+      "q_addr": "dewey liverpool",
+      "t_name": "dermatology bay center",
+      "t_addr": "dewey liverpool"
+    },
+    {
+      "q_country": "US",
+      "q_name": "metro federation",
+      "q_addr": "ann tolland",
+      "t_name": "metro partners enterprises",
+      "t_addr": ""
+    },
+    {
+      "q_country": "India",
+      "q_name": "a m group",
+      "q_addr": "bangalore ideal homes township rajarajeshwari ii",
+      "t_name": "msa m",
+      "t_addr": "ii ideal homes township rajarajeshwari"
+    },
+    {
+      "q_country": "US",
+      "q_name": "donzes distribution",
+      "q_addr": "crescent fresh meadows",
+      "t_name": "donzes distribution",
+      "t_addr": "crescent fresh meadows"
+    },
+    {
+      "q_country": "US",
+      "q_name": "gabor rexford",
+      "q_addr": "blantyre bend round rock",
+      "t_name": "gabor rexford",
+      "t_addr": "blantyre bend round rock"
+    },
+    {
+      "q_country": "India",
+      "q_name": "beta india",
+      "q_addr": "noida gautam buddha",
+      "t_name": "beta india",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "brouillette bice advertising",
+      "q_addr": "12th minot",
+      "t_name": "brouillette bice advertising",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "merilyns silver fitness",
+      "q_addr": "walleye us_fl crofton",
+      "t_name": "merilyns silver fitness",
+      "t_addr": "us_fl walleye crofton"
+    },
+    {
+      "q_country": "India",
+      "q_name": "hg high",
+      "q_addr": "basement lajpat ii new delhi south delhi",
+      "t_name": "nylafaye",
+      "t_addr": "south delhi basement lajpat ii badarpur new delhi"
+    },
+    {
+      "q_country": "India",
+      "q_name": "valley partners",
+      "q_addr": "howrah kolkata jawaharlal nehru mazzanine",
+      "t_name": "valley partners services",
+      "t_addr": "kolkata srikrishnanagar south twenty four parganas"
+    },
+    {
+      "q_country": "US",
+      "q_name": "he y graphics",
+      "q_addr": "gold rush albuquerque",
+      "t_name": "tavodova",
+      "t_addr": "gold rush albuquerque"
+    },
+    {
+      "q_country": "India",
+      "q_name": "shakti foods",
+      "q_addr": "s1 kamal cinema arjun safdarjung enclave new delhi south delhi",
+      "t_name": "shakti foods",
+      "t_addr": ""
+    },
+    {
+      "q_country": "India",
+      "q_name": "fp tech",
+      "q_addr": "cuttack sadar mohapatra cuttack",
+      "t_name": "fp tdthc",
+      "t_addr": "mohapatra cuttack sadar cuttack"
+    },
+    {
+      "q_country": "India",
+      "q_name": "simhapuri",
+      "q_addr": "at tenibigha sn college gali jehanabad jehanabad",
+      "t_name": "simhapuri service",
+      "t_addr": "jehanabad at tenibigha sn college"
+    },
+    {
+      "q_country": "US",
+      "q_name": "elite wholesale",
+      "q_addr": "lot 29th seneca",
+      "t_name": "elite wholesale",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "chambers smith",
+      "q_addr": "apple creek brooklyn",
+      "t_name": "chambers smith",
+      "t_addr": ""
+    },
+    {
+      "q_country": "US",
+      "q_name": "ear nose throat medicine",
+      "q_addr": "walnut hill irving unit",
+      "t_name": "gildorbi",
+      "t_addr": "walnut hill po box irving"
+    }
+  ]
+}

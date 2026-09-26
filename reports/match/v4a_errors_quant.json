@@ -1,0 +1,18 @@
+{
+  "n_fn": 58063,
+  "n_fp": 11947,
+  "fn_in_shortlist": 54635,
+  "fn_blocking_miss": 3428,
+  "fn_identical_text": 1952,
+  "fn_same_name_only": 24340,
+  "fn_addr_empty_one_side": 35371,
+  "fp_identical_text": 845,
+  "fp_same_name_only": 5760,
+  "fp_addr_empty_one_side": 4152,
+  "fn_identical_in_shortlist": 1952,
+  "fn_scored_p": {
+    "lt_0.3": 29097,
+    "0.3_0.69": 25366,
+    "gt_0.69_lost_excl": 172
+  }
+}

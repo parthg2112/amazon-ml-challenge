@@ -1,0 +1,26 @@
+{
+  "v4a": {
+    "n_feats": 115,
+    "holdout": "India",
+    "auc": 0.9974298236483197,
+    "pr_auc": 0.9903161360829632,
+    "macro_f05_frozen_policy": 0.9509399128415486,
+    "policy": {
+      "decision_winner": "prior_tilted_exact_f05",
+      "exclusivity_winner": "max_probability",
+      "threshold": 0.69
+    }
+  },
+  "v4b": {
+    "n_feats": 106,
+    "holdout": "India",
+    "auc": 0.997431266013671,
+    "pr_auc": 0.990330030910066,
+    "macro_f05_frozen_policy": 0.9505523934713044,
+    "policy": {
+      "decision_winner": "prior_tilted_exact_f05",
+      "exclusivity_winner": "max_probability",
+      "threshold": 0.69
+    }
+  }
+}

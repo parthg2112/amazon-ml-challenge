@@ -1,0 +1,386 @@
+{
+  "name": "v4b",
+  "config": "configs/blocking/b_v9.toml",
+  "k": 10,
+  "scope": "val",
+  "backend": "xgb_gpu",
+  "val_pairs": 8844660,
+  "pos_rate": 0.17276119149859914,
+  "features": [
+    "sim_name_ratio",
+    "sim_name_tset",
+    "sim_name_tsort",
+    "sim_name_partial",
+    "sim_name_jw",
+    "sim_full_tset",
+    "sim_addr_ratio",
+    "sim_addr_tset",
+    "sim_min_tset",
+    "sim_min_ratio",
+    "sim_name_char3",
+    "sim_addr_char3",
+    "name_tok_overlap_n",
+    "name_tok_overlap_idf",
+    "name_tok_rare_overlap_n",
+    "name_tok_extra_q_n",
+    "name_tok_extra_q_idf",
+    "name_tok_extra_t_n",
+    "name_tok_extra_t_idf",
+    "addr_tok_overlap_n",
+    "addr_tok_overlap_idf",
+    "addr_tok_rare_overlap_n",
+    "addr_tok_extra_q_n",
+    "addr_tok_extra_q_idf",
+    "addr_tok_extra_t_n",
+    "addr_tok_extra_t_idf",
+    "landmark_tok_overlap_n",
+    "landmark_tok_overlap_idf",
+    "landmark_tok_rare_overlap_n",
+    "landmark_tok_extra_q_n",
+    "landmark_tok_extra_q_idf",
+    "landmark_tok_extra_t_n",
+    "landmark_tok_extra_t_idf",
+    "name_core_exact",
+    "house_state",
+    "house_abs_diff",
+    "house_rel_diff",
+    "both_addr_empty",
+    "either_addr_empty",
+    "addr_num_overlap",
+    "addr_num_jaccard",
+    "same_country",
+    "is_s3",
+    "rank_within_s1_src",
+    "rank_by_name",
+    "rank_by_addr",
+    "n_cands_same_src",
+    "n_cands_total",
+    "n_s1_claiming_record",
+    "margin_to_best_competitor",
+    "support_opposite_src_best",
+    "house_digit_dropped",
+    "house_digit_changed",
+    "name_min_exact",
+    "name_noise_only_diff",
+    "rank_B1_name_concat",
+    "rank_B1_name_fold",
+    "rank_B1_house_token",
+    "rank_B2_name_word",
+    "rank_B4_addr_char",
+    "rank_B5_name_addr",
+    "rank_B7_dense",
+    "rank_B1_name_min",
+    "score_B1_name_concat",
+    "score_B1_name_fold",
+    "score_B1_house_token",
+    "score_B2_name_word",
+    "score_B4_addr_char",
+    "score_B5_name_addr",
+    "score_B7_dense",
+    "score_B1_name_min",
+    "n_channels",
+    "best_rank",
+    "p",
+    "frank",
+    "dense_cos",
+    "gap_p",
+    "gapsrc_p",
+    "z_p",
+    "gap_dense_cos",
+    "gapsrc_dense_cos",
+    "z_dense_cos",
+    "gap_sim_full_tset",
+    "gapsrc_sim_full_tset",
+    "z_sim_full_tset",
+    "gap_sim_min_tset",
+    "gapsrc_sim_min_tset",
+    "z_sim_min_tset",
+    "gap_sim_name_tset",
+    "gapsrc_sim_name_tset",
+    "z_sim_name_tset",
+    "gap_sim_addr_tset",
+    "gapsrc_sim_addr_tset",
+    "z_sim_addr_tset",
+    "gap_sim_name_char3",
+    "gapsrc_sim_name_char3",
+    "z_sim_name_char3",
+    "gap_sim_addr_char3",
+    "gapsrc_sim_addr_char3",
+    "z_sim_addr_char3",
+    "gap_name_tok_overlap_idf",
+    "gapsrc_name_tok_overlap_idf",
+    "z_name_tok_overlap_idf",
+    "gap_addr_num_jaccard",
+    "gapsrc_addr_num_jaccard",
+    "z_addr_num_jaccard"
+  ],
+  "drop_groups": [
+    "legal",
+    "geo",
+    "script"
+  ],
+  "policy": {
+    "decision_winner": "prior_tilted_exact_f05",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.69
+  },
+  "stages": {
+    "0_threshold_0.5_no_exclusivity": {
+      "macro_f05": 0.9781704490784965,
+      "singleton_accuracy": 0.9532502226179875,
+      "n_predicted_pairs": 1509378
+    },
+    "1_threshold_0.5_plus_exclusivity": {
+      "macro_f05": 0.9785592068192985,
+      "singleton_accuracy": 0.9547883105318546,
+      "n_predicted_pairs": 1508034
+    },
+    "2a_tuned_global_threshold": {
+      "macro_f05": 0.9803631693251459,
+      "singleton_accuracy": 0.9736096494778597,
+      "n_predicted_pairs": 1485226,
+      "threshold": 0.69
+    },
+    "2b_per_entity_expected_f05": {
+      "macro_f05": 0.9803258641927958,
+      "singleton_accuracy": 0.948838338865053,
+      "n_predicted_pairs": 1479292
+    },
+    "2c_exact_expected_f05": {
+      "macro_f05": 0.9804326605534144,
+      "singleton_accuracy": 0.9525216546587874,
+      "n_predicted_pairs": 1477526
+    },
+    "2b_per_entity_scarcity_exclusivity": {
+      "macro_f05": 0.9803258641927958,
+      "singleton_accuracy": 0.948838338865053,
+      "n_predicted_pairs": 1479292
+    },
+    "2d_prior_tilted_exact_f05": {
+      "macro_f05": 0.9805135110163905,
+      "singleton_accuracy": 0.9553954504978548,
+      "n_predicted_pairs": 1478053
+    },
+    "2e_capped_tuned_threshold": {
+      "macro_f05": 0.9803648483469842,
+      "singleton_accuracy": 0.9736096494778597,
+      "n_predicted_pairs": 1485210
+    },
+    "2f_expected_count_topk": {
+      "macro_f05": 0.8995292330471327,
+      "singleton_accuracy": 0.0010118999433336032,
+      "n_predicted_pairs": 1513279
+    },
+    "2g_prior_matched_threshold": {
+      "macro_f05": 0.9735076995584346,
+      "singleton_accuracy": 0.9308265198737149,
+      "n_predicted_pairs": 1530680,
+      "threshold": 0.3258540630340576
+    },
+    "3_final": {
+      "macro_f05": 0.9805135110163905,
+      "singleton_accuracy": 0.9553954504978548,
+      "n_predicted_pairs": 1478053
+    }
+  },
+  "final_macro_f05": 0.9805135110163905,
+  "by_country_frozen_policy": {
+    "India": 0.9777360705844487,
+    "US": 0.982384037234883
+  },
+  "calibration": {
+    "raw": {
+      "bin_mean_pred": [
+        1.8284236437314301e-07,
+        1.152386573169481e-06,
+        4.082890698115508e-06,
+        1.2823824904920674e-05,
+        4.2714515044050606e-05,
+        0.0001731620418952154,
+        0.0010008933971169484,
+        0.010255311205345364,
+        0.7156113074579082,
+        0.9998981574939394
+      ],
+      "bin_frac_pos": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0351285805543463e-05,
+        0.00012889133104042439,
+        0.0008140505118342593,
+        0.009762953013456708,
+        0.7169337742728737,
+        0.9999547745113668
+      ],
+      "max_calibration_gap": 0.0013224668149655061,
+      "brier_score": 0.0055740163661539555
+    },
+    "calibrated": null,
+    "applied": false
+  },
+  "importance": [
+    [
+      "p",
+      25701945.6
+    ],
+    [
+      "z_p",
+      3310482.1
+    ],
+    [
+      "z_dense_cos",
+      712240.925
+    ],
+    [
+      "name_tok_extra_t_idf",
+      377704.75625
+    ],
+    [
+      "house_abs_diff",
+      288327.375
+    ],
+    [
+      "margin_to_best_competitor",
+      228880.29375
+    ],
+    [
+      "addr_num_jaccard",
+      157517.296875
+    ],
+    [
+      "gap_p",
+      122752.5375
+    ],
+    [
+      "house_rel_diff",
+      92248.2765625
+    ],
+    [
+      "gapsrc_addr_num_jaccard",
+      81155.6140625
+    ],
+    [
+      "sim_full_tset",
+      70676.5875
+    ],
+    [
+      "name_tok_extra_t_n",
+      69220.5171875
+    ],
+    [
+      "addr_num_overlap",
+      66515.7734375
+    ],
+    [
+      "house_digit_dropped",
+      63475.81796875
+    ],
+    [
+      "gapsrc_p",
+      60921.2625
+    ],
+    [
+      "name_tok_extra_q_idf",
+      56783.47421875
+    ],
+    [
+      "z_addr_num_jaccard",
+      55796.4828125
+    ],
+    [
+      "z_sim_addr_char3",
+      47726.37109375
+    ],
+    [
+      "dense_cos",
+      47389.13515625
+    ],
+    [
+      "sim_min_ratio",
+      46723.5078125
+    ],
+    [
+      "sim_name_tsort",
+      46347.3953125
+    ],
+    [
+      "score_B7_dense",
+      44902.38046875
+    ],
+    [
+      "name_tok_overlap_idf",
+      37802.21875
+    ],
+    [
+      "z_sim_full_tset",
+      36419.50234375
+    ],
+    [
+      "sim_min_tset",
+      36210.046484375
+    ],
+    [
+      "gap_name_tok_overlap_idf",
+      35913.92890625
+    ],
+    [
+      "z_name_tok_overlap_idf",
+      32856.346875
+    ],
+    [
+      "gap_sim_full_tset",
+      31827.973046875
+    ],
+    [
+      "addr_tok_overlap_idf",
+      31568.978125
+    ],
+    [
+      "n_s1_claiming_record",
+      29634.958984375
+    ],
+    [
+      "sim_name_jw",
+      28647.50546875
+    ],
+    [
+      "z_sim_addr_tset",
+      27035.458203125
+    ],
+    [
+      "addr_tok_extra_t_idf",
+      25245.63359375
+    ],
+    [
+      "gap_sim_min_tset",
+      24459.15
+    ],
+    [
+      "score_B1_name_concat",
+      24289.193359375
+    ],
+    [
+      "addr_tok_extra_q_idf",
+      23312.7765625
+    ],
+    [
+      "z_sim_min_tset",
+      21379.09765625
+    ],
+    [
+      "name_tok_overlap_n",
+      20357.635546875
+    ],
+    [
+      "sim_name_partial",
+      19909.6328125
+    ],
+    [
+      "sim_name_char3",
+      19829.947265625
+    ]
+  ],
+  "total_s": 390.4
+}
