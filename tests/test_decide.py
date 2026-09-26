@@ -138,3 +138,14 @@ def test_exact_select_predicts_nothing_for_weak_candidates():
     out = select(df)
     assert set(out.filter(pl.col("s1_id") == "S1-1")["target_id"]) == {"a", "b"}
     assert out.filter(pl.col("s1_id") == "S1-2").height == 0  # singleton: empty prediction wins
+
+
+def test_renormalize_keeps_uncontested_and_shrinks_contested():
+    df = pl.DataFrame({
+        "s1_id": ["S1-1", "S1-2", "S1-3"], "target_id": ["S2-1", "S2-2", "S2-2"], "src": ["S2"] * 3,
+        "p": [0.8, 0.9, 0.9],
+    })
+    out = exclusivity.renormalize(df)
+    assert out["p"][0] == pytest.approx(0.8, abs=1e-6)
+    assert out["p"][1] < 0.5 and out["p"][2] < 0.5  # 9 / (1 + 18) = 0.474
+    assert out["p"][1] == pytest.approx(9 / 19, abs=1e-6)

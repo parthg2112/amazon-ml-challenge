@@ -128,3 +128,21 @@ def test_add_relative_gaps_zero_at_best():
     assert out["gap_p"].to_list() == pytest.approx([0.0, 0.5, 0.0])
     assert out["gapsrc_p"].to_list() == [0.0, 0.0, 0.0]
     assert out["z_p"][2] == 0.0
+
+
+def test_twin_group_features():
+    from er.match.features import add_local_context
+
+    df = pl.DataFrame({
+        "s1_id": ["a", "a", "a"], "src": ["S2", "S2", "S3"],
+        "t_name_min_key": ["acme", "acme", "other"],
+        "sim_addr_tset": [0.9, 0.4, 0.7], "p": [0.8, 0.3, 0.6],
+        "sim_name_tset": [0.9, 0.5, 0.6], "_ctx_score": [0.9, 0.5, 0.7],
+    })
+    out = add_local_context(df)
+    r = out.sort("src", "t_name_min_key")
+    assert r["n_cands_same_name"].to_list() == [2, 2, 1]
+    assert r["ng_addr_rank"].to_list() == [1, 2, 1]
+    assert r["ng_addr_gap"].to_list() == pytest.approx([0.0, 0.5, 0.0])
+    assert r["ng_p_rank"].to_list() == [1, 2, 1]
+    assert r["ng_p_gap"].to_list() == pytest.approx([0.0, 0.5, 0.0])

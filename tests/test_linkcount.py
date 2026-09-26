@@ -83,3 +83,32 @@ def test_real_truth_caps_match_the_documented_structure():
     """S2 0..5 and S3 0..6 are the ceilings the review quotes; guard them against silent drift."""
     prior = linkcount.fit_prior(_truth([["S2-1"] * 5 + ["S3-1"] * 6, []]))
     assert prior.caps == {"S2": 5, "S3": 6}
+
+
+def test_match_expected_count_hits_target_and_is_noop_at_target():
+    df = pl.DataFrame({"s1_id": ["a", "a", "b", "b"], "target_id": ["x", "y", "z", "w"],
+                       "p": [0.9, 0.6, 0.8, 0.3]}, schema_overrides={"p": pl.Float32})
+    cur = float(df["p"].sum()) / 2
+    same = linkcount.match_expected_count(df, cur)
+    assert np.allclose(same["p"].to_numpy(), df["p"].to_numpy(), atol=1e-4)
+    up = linkcount.match_expected_count(df, cur + 0.3)
+    assert float(up["p"].sum()) / 2 == pytest.approx(cur + 0.3, abs=1e-3)
+    assert (np.argsort(up["p"].to_numpy()) == np.argsort(df["p"].to_numpy())).all()  # monotone
+
+
+def test_select_tilted_single_group_equals_plain():
+    prior = linkcount.LinkPrior(total=np.array([0.1, 0.3, 0.4, 0.2]), per_src={})
+    df = pl.DataFrame({"s1_id": ["a", "a", "a", "b", "b"], "target_id": ["x", "y", "z", "u", "v"],
+                       "p": [0.9, 0.5, 0.2, 0.7, 0.4], "country": ["C"] * 5})
+    plain = linkcount.select_tilted(df.drop("country"), prior).select("s1_id", "target_id").sort("target_id")
+    grouped = linkcount.select_tilted(df, prior, group_col="country").select("s1_id", "target_id").sort("target_id")
+    assert plain.equals(grouped)
+
+
+def test_match_expected_count_skips_groups_within_tolerance():
+    df = pl.DataFrame({"s1_id": ["a", "a", "b", "b"], "target_id": ["x", "y", "z", "w"],
+                       "p": [0.9, 0.6, 0.2, 0.1], "g": ["near", "near", "far", "far"]},
+                      schema_overrides={"p": pl.Float32})
+    out = linkcount.match_expected_count(df, 1.5, "g", tol=0.05)
+    assert sorted(out.filter(pl.col("g") == "near")["p"].to_list()) == pytest.approx([0.6, 0.9], abs=1e-6)
+    assert float(out.filter(pl.col("g") == "far")["p"].sum()) == pytest.approx(1.5, abs=1e-3)

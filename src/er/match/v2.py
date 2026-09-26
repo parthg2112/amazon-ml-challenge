@@ -61,6 +61,60 @@ def _fit_block(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: pl.Data
             "decision": decision, "policy": policy}
 
 
+def _fit_block_stream(paths: list, feats: list[str], truth: pl.DataFrame, backend: str = "xgb_gpu",
+                      macro_weight: bool = False) -> dict:
+    """Same contract as `_fit_block` for training sets too big for RAM: per fold, read only that fold's
+    rows from the chunk caches (features + label + cv_fold live in the caches), fit, predict, free.
+    Peak RAM = one fold's matrix instead of the whole frame. REL features are recomputed per fold —
+    safe because cv_fold is per-S1, so every S1's shortlist is complete within a fold.
+    `macro_weight`: pairs weighted 1/max(true links in shortlist, 1), so each S1 counts ~equally (macro F)."""
+    import xgboost as xgb
+
+    def weights(df: pl.DataFrame) -> np.ndarray | None:
+        if not macro_weight:
+            return None
+        return df.select(1 / pl.col("y").sum().over("s1_id").clip(lower_bound=1))[:, 0].to_numpy()
+
+    folds = sorted({f for p in paths for f in pl.read_parquet(p, columns=["cv_fold"])["cv_fold"].unique().to_list()})
+    oof_parts, models, importances = [], [], []
+    for f in folds:
+        tr_parts, va_parts = [], []
+        for p in paths:
+            chunk = pl.read_parquet(p)
+            tr_parts.append(chunk.filter(pl.col("cv_fold") != f))
+            va_parts.append(chunk.filter(pl.col("cv_fold") == f))
+        tr = features.add_relative(pl.concat(tr_parts))
+        Xtr = train.matrix(tr, feats)
+        ytr, wtr = tr["y"].to_numpy(), weights(tr)
+        del tr, tr_parts
+        gc.collect()
+        dtr = xgb.QuantileDMatrix(Xtr, label=ytr, weight=wtr, max_bin=train.XGB_PARAMS["max_bin"])
+        del Xtr
+        gc.collect()
+        va = features.add_relative(pl.concat(va_parts))
+        Xva = train.matrix(va, feats)
+        yva = va["y"].to_numpy()
+        dva = xgb.QuantileDMatrix(Xva, label=yva, weight=weights(va), ref=dtr)
+        booster = xgb.train({**train.XGB_PARAMS}, dtr, num_boost_round=1000, evals=[(dva, "val")],
+                            early_stopping_rounds=40, verbose_eval=False)
+        m = train.XgbModel(booster)
+        oof_parts.append(va.select("s1_id", "target_id", "src", "q_country").with_columns(
+            pl.Series("p_raw", m.predict(Xva)), pl.Series("y", va["y"].to_numpy())))
+        models.append(m)
+        importances.append(m.feature_importance())
+        del dtr, dva, va, Xva, va_parts
+        gc.collect()
+    oof_raw = pl.concat(oof_parts).sort(["s1_id", "target_id"])
+    y = oof_raw["y"].to_numpy()
+    calibrated, calib, iso = train.maybe_calibrate(y, oof_raw["p_raw"].to_numpy())
+    oof_df = oof_raw.drop("p_raw", "y").with_columns(pl.Series("p", calibrated))
+    decision = pipeline.run(oof_df, truth)
+    policy = {"decision_winner": decision["decision_winner"], "exclusivity_winner": decision["exclusivity_winner"],
+              "threshold": decision["global_threshold"]["best"]}
+    return {"models": models, "iso": iso, "oof": oof_df, "importance": np.mean(importances, axis=0),
+            "calibration": calib, "decision": decision, "policy": policy}
+
+
 def _score(block: dict, X: np.ndarray) -> np.ndarray:
     raw = train.predict_mean(block["models"], X)
     return (block["iso"].transform(raw) if block["iso"] is not None else raw).astype(np.float32)
@@ -82,33 +136,67 @@ def country_transfer(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: p
 
 
 def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False, scope: str = "val",
-        backend: str = "xgb_gpu", relative: bool = True, drop_groups: tuple[str, ...] = ()) -> dict:
+        backend: str = "xgb_gpu", relative: bool = True, drop_groups: tuple[str, ...] = (),
+        train_scope: str = "val", macro_weight: bool = False) -> dict:
+    """train_scope "val": the M5-clean val-only fit. "expanded": full-scope context + val + clean rtrain12
+    S1s (ranker's own 44k sample excluded: its p is in-sample), trained with per-fold streaming CV."""
     t0 = time.perf_counter()
-    uni = Universe(config_path, "train", k, scope)
-    uni.shortlists()
-    df = uni.val_features()
     truth = io.load_truth()
-    y = ranker.label(df, truth)
-    df = df.join(load_split().select("s1_id", "cv_fold"), on="s1_id", how="left")
-    feats = features.NUMERIC_FEATURES + uni.extra_features()
-    if relative:
-        df = features.add_relative(df)
-        feats = feats + features.REL_FEATURES
-    feats = features.apply_drop_groups(feats, drop_groups)
-    print(f"val pairs {df.height:,}, pos rate {y.mean():.4f}, {len(feats)} features, "
-          f"dropped groups {list(drop_groups) or 'none'}", flush=True)
+    if train_scope == "val":
+        uni = Universe(config_path, "train", k, scope)
+        uni.shortlists()
+        df = uni.val_features()
+        y = ranker.label(df, truth)
+        df = df.join(load_split().select("s1_id", "cv_fold"), on="s1_id", how="left")
+        feats = features.NUMERIC_FEATURES + uni.extra_features()
+        if relative:
+            df = features.add_relative(df)
+            feats = feats + features.REL_FEATURES
+        feats = features.apply_drop_groups(feats, drop_groups)
+        print(f"val pairs {df.height:,}, pos rate {y.mean():.4f}, {len(feats)} features, "
+              f"dropped groups {list(drop_groups) or 'none'}", flush=True)
 
-    t_cv = time.perf_counter()
-    block = _fit_block(df, y, feats, truth, backend)
-    print(f"CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
+        t_cv = time.perf_counter()
+        block = _fit_block(df, y, feats, truth, backend)
+        print(f"CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
+    else:
+        uni = Universe(config_path, "train", k, "val")
+        split_df = load_split()
+        extra = subset_ids(split_df, "rtrain12")
+        extra = extra.filter(~extra.is_in(subset_ids(split_df, "rtrain").implode()))
+        ids = pl.concat([subset_ids(split_df, "val"), extra])
+        uni.extend_chunks(extra)
+        uni.shortlists()
+        feats = features.NUMERIC_FEATURES + uni.extra_features() + (features.REL_FEATURES if relative else [])
+        feats = features.apply_drop_groups(feats, drop_groups)
+        tag = "ex"
+        uni.subset_features(ids, tag, uni.global_context())  # builds/loads caches; df freed right after
+        del ids, extra
+        gc.collect()
+        paths = uni.chunk_paths(tag)
+        train_universe = sum(pl.read_parquet(p, columns=["s1_id"])["s1_id"].n_unique() for p in paths)
+        print(f"expanded training: {len(paths)} chunk caches, {train_universe:,} S1, {len(feats)} features, "
+              f"dropped groups {list(drop_groups) or 'none'}", flush=True)
+        t_cv = time.perf_counter()
+        block = _fit_block_stream(paths, feats, truth, backend, macro_weight)
+        print(f"streaming CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
+        df = None
+        y = None
     by_country = {}
-    for c in df["q_country"].unique().sort().to_list():
+    for c in block["oof"]["q_country"].unique().sort().to_list():
         sub = block["oof"].filter(pl.col("q_country") == c)
         t_sub = truth.filter(pl.col("s1_id").is_in(sub["s1_id"].unique().implode()))
         by_country[c] = macro_f05(t_sub, _policy_predict(sub, block["policy"]))
+    if train_scope != "val":
+        # transfer checks need the frame: reload from caches (caches carry label + fold)
+        paths = uni.chunk_paths("ex")
+        df = features.add_relative(pl.concat(pl.read_parquet(p) for p in paths))
+        y = df["y"].to_numpy()
     result = {
-        "name": name, "config": config_path, "k": k, "scope": scope, "backend": backend,
-        "val_pairs": df.height, "pos_rate": float(y.mean()),
+        "name": name, "config": config_path, "k": k,
+        "scope": "full" if train_scope != "val" else scope, "backend": backend,
+        "train_scope": train_scope, "val_pairs": df.height, "pos_rate": float(y.mean()),
+        "train_universe_s1": block["oof"]["s1_id"].n_unique() if train_scope != "val" else None,
         "features": feats, "drop_groups": list(drop_groups),
         "policy": block["policy"], "stages": block["decision"]["stages"],
         "final_macro_f05": block["decision"]["final"]["macro_f05"], "by_country_frozen_policy": by_country,
@@ -118,9 +206,12 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
     if transfer:
         result["country_transfer"] = [country_transfer(df, y, feats, truth, c, backend)
                                       for c in df["q_country"].unique().sort().to_list()]
+        del df, y
+        gc.collect()
     MODELS.mkdir(parents=True, exist_ok=True)
     bundle = {"models": block["models"], "iso": block["iso"], "features": feats, "policy": block["policy"],
-              "config": config_path, "k": k, "scope": scope}
+              "config": config_path, "k": k, "scope": "full" if train_scope != "val" else scope,
+              "train_universe_s1": result["train_universe_s1"]}
     (MODELS / f"{name}.pkl").write_bytes(pickle.dumps(bundle))
     block["oof"].write_parquet(io.ARTIFACTS / "match" / f"oof_{name}.parquet", mkdir=True)
     result["total_s"] = round(time.perf_counter() - t0, 1)
@@ -129,11 +220,11 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
 
 
 def ctx_parts(bundle: dict) -> int:
-    """Test partitions giving the same S1-per-target density the bundle's context was trained on."""
-    if bundle.get("scope", "val") == "full":
-        return 1
+    """Test partitions giving the same S1-per-target density the bundle's context was trained on.
+    Derived from the bundle's own training-universe size so any fit path stays density-matched."""
     n_tg = {s: sum(io.load_source(s, src).height for src in io.TARGET_SOURCES) for s in ("train", "test")}
-    train_density = subset_ids(load_split(), "val").len() / n_tg["train"]
+    train_n = bundle.get("train_universe_s1") or subset_ids(load_split(), "val").len()
+    train_density = train_n / n_tg["train"]
     test_density = io.load_source("test", "S1").height / n_tg["test"]
     return max(1, round(test_density / train_density))
 

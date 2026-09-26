@@ -27,7 +27,7 @@ from er.match.idf import build_word_idf
 from er.split import load_split, subset_ids
 
 SHORTLIST_VERSION = 1  # bump when pass-1 logic changes
-FEATURE_VERSION = 2  # bump when pass-2 features change (v2: +t_name_support/q_name_support)
+FEATURE_VERSION = 3  # bump when pass-2 features change (v2: name-support; v3: +twin-group ng_* features)
 CACHE = io.ARTIFACTS / "cache" / "match"
 
 
@@ -71,6 +71,12 @@ class Universe:
         self._pools = None
 
     # ---------- pass 1 ----------
+    def extend_chunks(self, ids: pl.Series) -> None:
+        """Append chunks for extra S1 ids (e.g. rtrain12) to the val-scope layout: shortlist paths are
+        (index, chunk-hash) so indexes continue past the val chunks without cache collisions."""
+        size = self.cfg.get("chunk", CHUNK)
+        self.chunks += list(_chunks(ids.sort(), size))
+
     def _shortlist_path(self, i: int, chunk: pl.Series) -> Path:
         return self.dir / f"shortlist_{i:03d}_{_h(chunk.to_list())}.parquet"
 
@@ -237,3 +243,35 @@ class Universe:
                 print(f"  features chunk {i}: {df.height:,} rows in {time.perf_counter() - t0:.0f}s", flush=True)
             parts.append(pl.read_parquet(path))
         return pl.concat(parts, how="diagonal_relaxed")
+
+    def subset_features(self, ids: pl.Series, tag: str, gctx: pl.DataFrame | None = None) -> pl.DataFrame:
+        """Features for an arbitrary S1 subset, cached per chunk under a distinct tag (never collides with
+        the val-scope caches: a full-scope context changes competitor features, and a subset cache holds
+        non-val rows that a `val_features` read must never silently pick up). Carries cv_fold + label so
+        the streaming CV can train fold-by-fold without assembling the full frame in RAM."""
+        from er.blocking import ranker
+
+        split_df = load_split().select("s1_id", "cv_fold")
+        truth = io.load_truth()
+        keep = ["s1_id", "target_id", "src", "q_country"] + features.NUMERIC_FEATURES + self.extra_features()
+        parts = []
+        for i, chunk in enumerate(self.chunks):
+            sub = chunk.filter(chunk.is_in(ids.implode()))
+            if sub.len() == 0:
+                continue
+            path = self.dir / f"features_v{FEATURE_VERSION}_{tag}_{i:03d}.parquet"
+            if not path.exists():
+                t0 = time.perf_counter()
+                df = self.features(i, sub, gctx)
+                df = df.join(split_df, on="s1_id", how="left")
+                df = df.with_columns(pl.Series("y", ranker.label(df, truth)))
+                df = df.select(keep + ["cv_fold", "y"])
+                tmp = path.with_suffix(".partial")
+                df.write_parquet(tmp)
+                tmp.replace(path)
+                print(f"  features[{tag}] chunk {i}: {df.height:,} rows in {time.perf_counter() - t0:.0f}s", flush=True)
+            parts.append(pl.read_parquet(path))
+        return pl.concat(parts, how="diagonal_relaxed")
+
+    def chunk_paths(self, tag: str) -> list[Path]:
+        return sorted(self.dir.glob(f"features_v{FEATURE_VERSION}_{tag}_*.parquet"))

@@ -30,6 +30,14 @@ def resolve_scarcity_weighted(df: pl.DataFrame, prob_col: str = "p") -> pl.DataF
     return _winner(df.sort("s1_id"), "_priority").drop("_n_cands", "_priority")
 
 
+def renormalize(df: pl.DataFrame, prob_col: str = "p") -> pl.DataFrame:
+    """At-most-one-owner posterior per target: odds_s / (1 + sum of claimants' odds), the mean-field form of
+    Sadinle (2017). Uncontested p is unchanged; contested winners shrink (val: 59% precise at mean p 0.86)."""
+    q = pl.col(prob_col).cast(pl.Float64).clip(1e-6, 1 - 1e-6)
+    odds = q / (1 - q)
+    return df.with_columns((odds / (1 + odds.sum().over("target_id"))).cast(pl.Float32).alias(prob_col))
+
+
 def conflict_stats(df: pl.DataFrame) -> dict:
     sizes = df.group_by("target_id").agg(pl.len().alias("n_claimants"))
     return {

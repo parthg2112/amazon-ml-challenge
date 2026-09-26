@@ -189,12 +189,42 @@ def count_diagnostics(scored: pl.DataFrame, prior: LinkPrior, n_s1: int | None =
     }
 
 
+def match_expected_count(df: pl.DataFrame, target: float, group_col: str | None = None,
+                         prob_col: str = "p", tol: float = 0.0) -> pl.DataFrame:
+    """KPM: per group, scale odds by alpha so sum(p) per S1 equals `target` (the country-invariant prior).
+    Monotone, so it moves only value-based rules. India proxy: +0.0027 alone, +0.0004 on top of band + EXR.
+    Groups within `tol` (relative) are left alone: in-distribution drift of 1-1.5% costs -0.0001 if matched."""
+    def one(g: pl.DataFrame) -> pl.DataFrame:
+        drift = float(g[prob_col].sum()) / max(g["s1_id"].n_unique(), 1) / target - 1
+        return g if abs(drift) <= tol else _scale_to(g, target, prob_col)
+
+    if group_col is None:
+        return one(df)
+    return pl.concat([one(g) for _, g in df.group_by(group_col, maintain_order=True)])
+
+
+def _scale_to(df: pl.DataFrame, target: float, prob_col: str) -> pl.DataFrame:
+    q = np.clip(df[prob_col].to_numpy().astype(np.float64), 1e-6, 1 - 1e-6)
+    odds, n = q / (1 - q), max(df["s1_id"].n_unique(), 1)
+    lo, hi = -4.0, 4.0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        a = np.exp(mid)
+        lo, hi = (mid, hi) if (a * odds / (1 + a * odds)).sum() / n < target else (lo, mid)
+    a = np.exp((lo + hi) / 2)
+    return df.with_columns(pl.Series(prob_col, (a * odds / (1 + a * odds)).astype(np.float32)))
+
+
 def select_tilted(df: pl.DataFrame, prior: LinkPrior, prob_col: str = "p",
-                 strength: float = 1.0) -> pl.DataFrame:
+                 strength: float = 1.0, group_col: str | None = None) -> pl.DataFrame:
     """Exact expected-F0.5 selection with the count posterior tilted onto the empirical prior.
 
     `strength` interpolates in log space: 0 reproduces `exact_f05.select`, 1 applies the full tilt.
+    `group_col` computes the tilt per group (e.g. country label) from that group's own implied counts.
     """
+    if group_col is not None:
+        return pl.concat([select_tilted(g.drop(group_col), prior, prob_col, strength)
+                          for _, g in df.group_by(group_col, maintain_order=True)])
     if df.height == 0:
         return df.select("s1_id", "target_id")
     ranked, P, wide = _matrix(df, prob_col)

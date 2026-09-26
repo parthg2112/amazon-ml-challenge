@@ -160,7 +160,8 @@ def cmd_fit2(args: argparse.Namespace) -> None:
     from er.match import v2
 
     r = v2.fit(args.config, args.k, args.name, transfer=args.transfer, scope=args.scope,
-               backend=args.backend, drop_groups=tuple(args.drop_groups))
+               backend=args.backend, drop_groups=tuple(args.drop_groups), train_scope=args.train_scope,
+               macro_weight=args.macro_weight)
     keep = ("final_macro_f05", "by_country_frozen_policy", "policy", "country_transfer", "total_s")
     print(json.dumps({k: r.get(k) for k in keep}, indent=2, default=str))
 
@@ -175,6 +176,29 @@ def cmd_submit2(args: argparse.Namespace) -> None:
     from er.match import v2
 
     print(json.dumps(v2.submit(args.name, args.ctx_parts), indent=2, default=str))
+
+
+def cmd_ce_train(args: argparse.Namespace) -> None:
+    from er.match import cross
+
+    pairs = cross.attach_text(cross.training_pairs(args.config, args.chunks, args.countries or None), "train")
+    print(json.dumps(cross.train(pairs, io.ARTIFACTS / "models" / args.name, init=args.init, lr=args.lr),
+                     indent=2, default=str))
+
+
+def cmd_ce_band(args: argparse.Namespace) -> None:
+    from er.match import ce_band
+
+    print(json.dumps(ce_band.fit_band(args.name, (args.lo, args.hi), not args.no_exr, not args.no_sc, args.ce_model),
+                     indent=2, default=str))
+
+
+def cmd_decide_test(args: argparse.Namespace) -> None:
+    from er.match import ce_band
+
+    exr = None if args.exr is None else args.exr == "on"
+    print(json.dumps(ce_band.decide_test(args.name, args.parts, not args.no_band, exr, args.kpm, args.by_country,
+                                         args.out), indent=2, default=str))
 
 
 def cmd_transfer(args: argparse.Namespace) -> None:
@@ -325,8 +349,11 @@ def main() -> None:
     sp.add_argument("--transfer", action="store_true", help="also run leave-country-out transfer checks")
     sp.add_argument("--drop-groups", nargs="*", default=[], choices=sorted(features.FEATURE_GROUPS),
                     help="feature groups to drop for the transfer ablation (see features.FEATURE_GROUPS)")
+    sp.add_argument("--train-scope", default="val", choices=["val", "expanded"],
+                    help="val: M5-clean val-only fit; expanded: full-scope context + clean rtrain12 S1s, streaming CV")
     sp.add_argument("--scope", default="val", choices=["val", "full"], help="competitor universe for context")
     sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "lgbm"])
+    sp.add_argument("--macro-weight", action="store_true", help="expanded scope: weight pairs 1/max(links, 1) per S1")
     sp.set_defaults(fn=cmd_fit2)
 
     sp = sub.add_parser("decide2", help="re-run the Step 5 policy on saved v2 OOF (no retraining)")
@@ -337,6 +364,34 @@ def main() -> None:
     sp.add_argument("--name", default="v2")
     sp.add_argument("--ctx-parts", type=int, default=None, help="competitor partitions (default: density-matched)")
     sp.set_defaults(fn=cmd_submit2)
+
+    sp = sub.add_parser("ce-train", help="train the band cross-encoder on ranker-subset pairs (never val)")
+    sp.add_argument("config")
+    sp.add_argument("--name", default="ce_usin", help="output dir under artifacts/models")
+    sp.add_argument("--chunks", type=int, default=5, help="25k-S1 chunks of the ranker subset to draw pairs from")
+    sp.add_argument("--countries", nargs="*", default=[], help="restrict to these labels (default: all)")
+    sp.add_argument("--init", default="artifacts/models/e5s_ft1")
+    sp.add_argument("--lr", type=float, default=3e-5)
+    sp.set_defaults(fn=cmd_ce_train)
+
+    sp = sub.add_parser("ce-band", help="fit the uncertain-band CE combiner on OOF; re-select and store the policy")
+    sp.add_argument("--name", default="v6")
+    sp.add_argument("--lo", type=float, default=0.2)
+    sp.add_argument("--hi", type=float, default=0.9)
+    sp.add_argument("--no-exr", action="store_true", help="skip exclusivity renormalization")
+    sp.add_argument("--no-sc", action="store_true", help="skip sibling house-consensus features")
+    sp.add_argument("--ce-model", default="ce_us", help="cross-encoder dir under artifacts/models")
+    sp.set_defaults(fn=cmd_ce_band)
+
+    sp = sub.add_parser("decide-test", help="re-decide cached test scores (band, EXR, policy); write both TSVs")
+    sp.add_argument("--name", default="v6")
+    sp.add_argument("--parts", type=int, required=True, help="which test_scored_<name>_p<parts> file")
+    sp.add_argument("--no-band", action="store_true")
+    sp.add_argument("--exr", choices=["on", "off"], default=None, help="override the bundle's EXR setting")
+    sp.add_argument("--kpm", action="store_true", help="match Σp per country label to the train prior")
+    sp.add_argument("--by-country", action="store_true", help="compute the count tilt per country label")
+    sp.add_argument("--out", default=None, help="output dir for the two TSVs (default: output/)")
+    sp.set_defaults(fn=cmd_decide_test)
 
     sp = sub.add_parser("transfer", help="area 2: ablate the ranker score / add within-record views, leave-country-out")
     sp.add_argument("config")

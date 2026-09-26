@@ -141,6 +141,19 @@ def add_local_context(df: pl.DataFrame, score_col: str = CTX_SCORE) -> pl.DataFr
         pl.len().over("s1_id", "src").alias("n_cands_same_src"),
         pl.len().over("s1_id").alias("n_cands_total"),
     )
+    # Twin-group evidence (Step 7 ledger): 25.8k FN twins sit at median p=0.33 while identical-name
+    # pairs are 54% true overall. Rank the pair's address/p evidence WITHIN its name group, so the
+    # model can trust an identical name when this target is the best-addressed twin in the group.
+    p_expr = pl.col("p") if "p" in df.columns else pl.lit(0.0, dtype=pl.Float32)
+    df = df.with_columns(
+        pl.col("sim_addr_tset").rank("ordinal", descending=True).over("s1_id", "t_name_min_key")
+        .alias("ng_addr_rank"),
+        (pl.col("sim_addr_tset").max().over("s1_id", "t_name_min_key") - pl.col("sim_addr_tset"))
+        .alias("ng_addr_gap"),
+        p_expr.rank("ordinal", descending=True).over("s1_id", "t_name_min_key").alias("ng_p_rank"),
+        (p_expr.max().over("s1_id", "t_name_min_key") - p_expr).alias("ng_p_gap"),
+        pl.len().over("s1_id", "t_name_min_key").alias("n_cands_same_name"),
+    )
     per_s1_src = df.group_by("s1_id", "src").agg(pl.col(score_col).max().alias("_max"))
     wide = per_s1_src.pivot(on="src", index="s1_id", values="_max")
     for src in ("S2", "S3"):
@@ -293,7 +306,8 @@ NUMERIC_FEATURES = (
        "addr_num_overlap", "addr_num_jaccard", "same_country", "is_s3", "rank_within_s1_src",
        "rank_by_name", "rank_by_addr", "n_cands_same_src", "n_cands_total", "n_s1_claiming_record",
        "margin_to_best_competitor", "support_opposite_src_best", "house_digit_dropped", "house_digit_changed",
-       "name_min_exact", "name_noise_only_diff", "t_name_support", "q_name_support"]
+       "name_min_exact", "name_noise_only_diff", "t_name_support", "q_name_support",
+       "ng_addr_rank", "ng_addr_gap", "ng_p_rank", "ng_p_gap", "n_cands_same_name"]
 )
 CATEGORICAL_FEATURES = ["legal_relation", "house_state", "region_state", "postal_state", "locality_state",
                         "unit_state"]
