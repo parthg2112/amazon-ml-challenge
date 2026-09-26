@@ -1,0 +1,402 @@
+{
+  "name": "v7",
+  "config": "configs/blocking/b_v9.toml",
+  "k": 10,
+  "scope": "full",
+  "backend": "xgb_gpu",
+  "train_scope": "full",
+  "val_pairs": 17844660,
+  "pos_rate": 0.16210586248210948,
+  "train_universe_s1": 2206821,
+  "features": [
+    "sim_name_ratio",
+    "sim_name_tset",
+    "sim_name_tsort",
+    "sim_name_partial",
+    "sim_name_jw",
+    "sim_full_tset",
+    "sim_addr_ratio",
+    "sim_addr_tset",
+    "sim_city_ratio",
+    "sim_min_tset",
+    "sim_min_ratio",
+    "sim_name_char3",
+    "sim_addr_char3",
+    "name_tok_overlap_n",
+    "name_tok_overlap_idf",
+    "name_tok_rare_overlap_n",
+    "name_tok_extra_q_n",
+    "name_tok_extra_q_idf",
+    "name_tok_extra_t_n",
+    "name_tok_extra_t_idf",
+    "addr_tok_overlap_n",
+    "addr_tok_overlap_idf",
+    "addr_tok_rare_overlap_n",
+    "addr_tok_extra_q_n",
+    "addr_tok_extra_q_idf",
+    "addr_tok_extra_t_n",
+    "addr_tok_extra_t_idf",
+    "landmark_tok_overlap_n",
+    "landmark_tok_overlap_idf",
+    "landmark_tok_rare_overlap_n",
+    "landmark_tok_extra_q_n",
+    "landmark_tok_extra_q_idf",
+    "landmark_tok_extra_t_n",
+    "landmark_tok_extra_t_idf",
+    "name_core_exact",
+    "alias_match",
+    "script_mismatch",
+    "q_name_native_f",
+    "t_name_native_f",
+    "house_state",
+    "house_abs_diff",
+    "house_rel_diff",
+    "region_state",
+    "postal_state",
+    "locality_state",
+    "unit_state",
+    "both_addr_empty",
+    "either_addr_empty",
+    "addr_num_overlap",
+    "addr_num_jaccard",
+    "same_country",
+    "is_s3",
+    "rank_within_s1_src",
+    "rank_by_name",
+    "rank_by_addr",
+    "n_cands_same_src",
+    "n_cands_total",
+    "n_s1_claiming_record",
+    "margin_to_best_competitor",
+    "support_opposite_src_best",
+    "house_digit_dropped",
+    "house_digit_changed",
+    "name_min_exact",
+    "name_noise_only_diff",
+    "t_name_support",
+    "q_name_support",
+    "ng_addr_rank",
+    "ng_addr_gap",
+    "ng_p_rank",
+    "ng_p_gap",
+    "n_cands_same_name",
+    "rank_B1_name_concat",
+    "rank_B1_name_fold",
+    "rank_B1_house_token",
+    "rank_B2_name_word",
+    "rank_B4_addr_char",
+    "rank_B5_name_addr",
+    "rank_B7_dense",
+    "rank_B1_name_min",
+    "score_B1_name_concat",
+    "score_B1_name_fold",
+    "score_B1_house_token",
+    "score_B2_name_word",
+    "score_B4_addr_char",
+    "score_B5_name_addr",
+    "score_B7_dense",
+    "score_B1_name_min",
+    "n_channels",
+    "best_rank",
+    "p",
+    "frank",
+    "dense_cos",
+    "gap_p",
+    "gapsrc_p",
+    "z_p",
+    "gap_dense_cos",
+    "gapsrc_dense_cos",
+    "z_dense_cos",
+    "gap_sim_full_tset",
+    "gapsrc_sim_full_tset",
+    "z_sim_full_tset",
+    "gap_sim_min_tset",
+    "gapsrc_sim_min_tset",
+    "z_sim_min_tset",
+    "gap_sim_name_tset",
+    "gapsrc_sim_name_tset",
+    "z_sim_name_tset",
+    "gap_sim_addr_tset",
+    "gapsrc_sim_addr_tset",
+    "z_sim_addr_tset",
+    "gap_sim_name_char3",
+    "gapsrc_sim_name_char3",
+    "z_sim_name_char3",
+    "gap_sim_addr_char3",
+    "gapsrc_sim_addr_char3",
+    "z_sim_addr_char3",
+    "gap_name_tok_overlap_idf",
+    "gapsrc_name_tok_overlap_idf",
+    "z_name_tok_overlap_idf",
+    "gap_addr_num_jaccard",
+    "gapsrc_addr_num_jaccard",
+    "z_addr_num_jaccard"
+  ],
+  "drop_groups": [
+    "legal"
+  ],
+  "policy": {
+    "decision_winner": "prior_tilted_exact_f05",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.66
+  },
+  "stages": {
+    "0_threshold_0.5_no_exclusivity": {
+      "macro_f05": 0.9807356375311082,
+      "singleton_accuracy": 0.966492628992629,
+      "n_predicted_pairs": 2851615
+    },
+    "1_threshold_0.5_plus_exclusivity": {
+      "macro_f05": 0.9814582464099891,
+      "singleton_accuracy": 0.9690417690417691,
+      "n_predicted_pairs": 2847173
+    },
+    "2a_tuned_global_threshold": {
+      "macro_f05": 0.982724940942135,
+      "singleton_accuracy": 0.980036855036855,
+      "n_predicted_pairs": 2817442,
+      "threshold": 0.66
+    },
+    "2b_per_entity_expected_f05": {
+      "macro_f05": 0.9828003468943791,
+      "singleton_accuracy": 0.9656173218673219,
+      "n_predicted_pairs": 2804842
+    },
+    "2c_exact_expected_f05": {
+      "macro_f05": 0.9828350966111159,
+      "singleton_accuracy": 0.9676904176904176,
+      "n_predicted_pairs": 2802461
+    },
+    "2b_per_entity_scarcity_exclusivity": {
+      "macro_f05": 0.9828003468943791,
+      "singleton_accuracy": 0.9656173218673219,
+      "n_predicted_pairs": 2804842
+    },
+    "2d_prior_tilted_exact_f05": {
+      "macro_f05": 0.9828689148798344,
+      "singleton_accuracy": 0.9679668304668305,
+      "n_predicted_pairs": 2806115
+    },
+    "2e_capped_tuned_threshold": {
+      "macro_f05": 0.9827273149987513,
+      "singleton_accuracy": 0.980036855036855,
+      "n_predicted_pairs": 2817412
+    },
+    "2f_expected_count_topk": {
+      "macro_f05": 0.8813167204632626,
+      "singleton_accuracy": 0.0018581081081081082,
+      "n_predicted_pairs": 2904025
+    },
+    "2g_prior_matched_threshold": {
+      "macro_f05": 0.9306912231292714,
+      "singleton_accuracy": 0.7960841523341523,
+      "n_predicted_pairs": 3088244,
+      "threshold": 0.026578595861792564
+    },
+    "3_final": {
+      "macro_f05": 0.9828689148798344,
+      "singleton_accuracy": 0.9679668304668305,
+      "n_predicted_pairs": 2806115
+    }
+  },
+  "final_macro_f05": 0.9828689148798344,
+  "by_country_frozen_policy": {
+    "India": 0.9803030387536424,
+    "US": 0.9845768861571437
+  },
+  "calibration": {
+    "raw": {
+      "bin_mean_pred": [
+        3.4458304885219443e-08,
+        2.670186510921259e-07,
+        1.249886070442108e-06,
+        4.490021915501758e-06,
+        1.608158660971504e-05,
+        7.496711583517384e-05,
+        0.0005380887532639413,
+        0.006441324868650941,
+        0.6137906471568143,
+        0.9999045906825257
+      ],
+      "bin_frac_pos": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.2415644326488344e-06,
+        3.250275713043244e-05,
+        0.00040964635919092885,
+        0.006021969597627526,
+        0.6146463157823954,
+        0.9999658143416122
+      ],
+      "max_calibration_gap": 0.000855668625581063,
+      "brier_score": 0.004663534928113222
+    },
+    "calibrated": null,
+    "applied": false
+  },
+  "importance": [
+    [
+      "p",
+      40442704.8
+    ],
+    [
+      "z_p",
+      14692854.6
+    ],
+    [
+      "margin_to_best_competitor",
+      2419842.1
+    ],
+    [
+      "house_abs_diff",
+      743433.075
+    ],
+    [
+      "name_tok_extra_t_idf",
+      730249.325
+    ],
+    [
+      "addr_num_jaccard",
+      578076.15
+    ],
+    [
+      "gap_p",
+      253999.15625
+    ],
+    [
+      "house_state",
+      147382.14375
+    ],
+    [
+      "house_rel_diff",
+      140312.56875
+    ],
+    [
+      "sim_full_tset",
+      138733.95
+    ],
+    [
+      "gapsrc_addr_num_jaccard",
+      136490.475
+    ],
+    [
+      "n_s1_claiming_record",
+      135951.721875
+    ],
+    [
+      "z_dense_cos",
+      122278.5390625
+    ],
+    [
+      "t_name_support",
+      122065.6421875
+    ],
+    [
+      "gapsrc_p",
+      118425.815625
+    ],
+    [
+      "name_tok_extra_t_n",
+      112923.4140625
+    ],
+    [
+      "addr_num_overlap",
+      110503.496875
+    ],
+    [
+      "n_cands_same_name",
+      110418.775
+    ],
+    [
+      "name_tok_extra_q_idf",
+      108803.253125
+    ],
+    [
+      "dense_cos",
+      100434.8453125
+    ],
+    [
+      "z_addr_num_jaccard",
+      98383.528125
+    ],
+    [
+      "house_digit_dropped",
+      90274.5
+    ],
+    [
+      "score_B7_dense",
+      87635.2
+    ],
+    [
+      "score_B1_name_concat",
+      86427.13125
+    ],
+    [
+      "z_sim_addr_char3",
+      82909.8921875
+    ],
+    [
+      "rank_within_s1_src",
+      82518.484375
+    ],
+    [
+      "sim_name_tsort",
+      77429.03125
+    ],
+    [
+      "sim_min_tset",
+      67893.0734375
+    ],
+    [
+      "name_tok_overlap_n",
+      64480.40390625
+    ],
+    [
+      "q_name_support",
+      58742.59375
+    ],
+    [
+      "addr_tok_overlap_idf",
+      56875.4203125
+    ],
+    [
+      "name_tok_overlap_idf",
+      54901.56953125
+    ],
+    [
+      "gap_name_tok_overlap_idf",
+      53602.2890625
+    ],
+    [
+      "z_name_tok_overlap_idf",
+      53593.5171875
+    ],
+    [
+      "sim_name_ratio",
+      50959.83515625
+    ],
+    [
+      "z_sim_full_tset",
+      50612.2765625
+    ],
+    [
+      "gap_sim_full_tset",
+      45088.10078125
+    ],
+    [
+      "sim_name_jw",
+      40823.14921875
+    ],
+    [
+      "addr_tok_overlap_n",
+      39435.46328125
+    ],
+    [
+      "sim_min_ratio",
+      35335.1625
+    ]
+  ],
+  "total_s": 972.1
+}

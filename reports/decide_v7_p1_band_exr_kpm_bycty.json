@@ -1,0 +1,27 @@
+{
+  "name": "v7",
+  "parts": 1,
+  "band": true,
+  "sc": true,
+  "exr": true,
+  "kpm": true,
+  "by_country": true,
+  "policy": {
+    "decision_winner": "prior_tilted_exact_f05",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.63
+  },
+  "sum_p_per_s1_by_country": {
+    "France": 3.4612527076299275,
+    "US": 3.4296239967667312,
+    "India": 3.4221745807952235
+  },
+  "predicted_pairs": 5803318,
+  "s1_with_matches": 1633392,
+  "links_per_s1": 3.3495934302390014,
+  "links_per_s1_by_country": {
+    "India": 3.3605445032383274,
+    "US": 3.369043561662841,
+    "France": 3.265694617886931
+  }
+}

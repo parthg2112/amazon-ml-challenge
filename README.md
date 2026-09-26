@@ -33,16 +33,19 @@ uv run pytest -q
 uv run er prepare; uv run er split
 uv run er learn; uv run er normalize --learned configs/learned/n4_v1.json   # norm variant t1-auto-n4_v1
 uv run er finetune --name e5s_ft1                     # dense retriever: multilingual-e5-small (MIT), train-fold pairs only
-uv run er fit2 configs/blocking/b_v9.toml --name v6 --train-scope expanded --drop-groups legal
+uv run er fit2 configs/blocking/b_v9.toml --name v7 --train-scope full --drop-groups legal   # see memory note below
 uv run er ce-train configs/blocking/b_v9.toml --name ce_usin_base --init intfloat/multilingual-e5-base --lr 2e-5
-uv run er ce-band --name v6 --ce-model ce_usin_base   # combiner on OOF (CE-seen S1 excluded) + policy, stored in the bundle
-uv run er submit2 --name v6                           # test scoring; competitor partitions density-matched (3)
-uv run er decide-test --name v6 --parts 3             # band rescore -> EXR -> tilted expected-F0.5 -> output/*.tsv
+uv run er ce-band --name v7 --ce-model ce_usin_base   # combiner on OOF (CE-seen S1 excluded) + policy, stored in the bundle
+uv run er submit2 --name v7                           # test scoring; competitor context over all test S1 (1 partition)
+uv run er decide-test --name v7 --parts 1             # band rescore -> EXR -> tilted expected-F0.5 -> output/*.tsv
 python student_resource/utils/validate_submission.py -m output/matching_results.tsv -c output/candidate_pairs.tsv -t student_resource/dataset/test --check-ids
 ```
 
-`fit2` builds v9 shortlists (9 channels + LightGBM lambdarank, top-10 per source) and caches them; test embeddings and
-shortlists are computed on demand by `submit2`. One RTX-class GPU (16 GB); `fit2` ≈ 25 min, `submit2` ≈ 32 min.
+`fit2 --train-scope full` needs shortlists for all 2.2M train S1 (competition context) and features for val + 450k
+clean extras. On 32 GB RAM build them in separate processes first (resumable caches), then run `fit2`:
+`Universe(cfg, "train", 10, "full")` → `_context().collect()` per missing chunk (channels) → `.shortlists()` →
+`.subset_features(ids, "fu", gctx, collect=False)`. One RTX-class GPU (16 GB); channels+shortlists ≈ 50 min,
+features ≈ 25 min, `fit2` ≈ 16 min, `submit2` ≈ 26 min.
 
 Subsets: `dev` is 10% of the validation holdout (44.5k S1), `val` is the full 20% holdout (442k S1), and `rtrain` is a 2% train-fold sample used to fit the stage-2 candidate ranker. Queries always search the full training S2/S3 pool, as at test time.
 

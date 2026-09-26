@@ -11,8 +11,8 @@
 A four-stage pipeline: country-aware normalization, a 9-channel blocker with a learned ranker (99.78% of true links kept in
 a top-10-per-source shortlist), a 122-feature XGBoost scorer whose uncertain band (0.2 < p < 0.9) is rescored by a
 cross-encoder plus sibling-consensus evidence, and a decision layer that renormalizes contested targets and picks each
-record's link set by exact expected F0.5 under a link-count prior. Out-of-fold macro F0.5 on a 477k-record validation set
-is 0.9856. Everything is country-agnostic by construction, so it applies unchanged to the unseen test country (France).
+record's link set by exact expected F0.5 under a link-count prior. Out-of-fold macro F0.5 on the 442k-record validation holdout
+is 0.9870. Everything is country-agnostic by construction, so it applies unchanged to the unseen test country (France).
 
 ---
 
@@ -76,9 +76,9 @@ link set maximizes expected F0.5 under the known link-count prior. The same mach
   - The legal-form feature group is dropped because it hurt unseen-country transfer.
 
 **Model type:**
-- **Pair scorer:** XGBoost (GPU), 5-fold CV grouped by Source-1 record, trained on 618k records. Test predictions average
-  the fold models. Competition features on test are computed within density-matched record partitions, so they match
-  the training distribution.
+- **Pair scorer:** XGBoost (GPU), 5-fold CV grouped by Source-1 record, trained on 892k records (validation holdout +
+  450k clean training records). Competition features (claimants, rival margins) are computed over all 2.2M training
+  records, the same density as the full test universe. Test predictions average the fold models.
 - **Band rescorer:** for 0.2 < p < 0.9, a logistic model on [logit p, tanh(cross-encoder logit / 2), sibling-consensus
   features]. It is cross-fitted by fold and excludes every record the cross-encoder was trained on.
   - The cross-encoder is multilingual-e5-base (278M, MIT) fine-tuned on 1.42M US+India pairs from the ranker's training subset,
@@ -98,10 +98,10 @@ link set maximizes expected F0.5 under the known link-count prior. The same mach
 
 ## 5. Results & Error Analysis
 
-- **F_0.5 score (macro, out-of-fold, 477k validation records not seen by the cross-encoder):** 0.9856.
+- **F_0.5 score (macro, out-of-fold, 442k-record validation holdout):** 0.9870.
   - Progression: 0.9812 (base scorer) → 0.9819 (twin features + 40% more training data) → 0.9837 (band rescoring with a
     US-only cross-encoder, + sibling consensus, + contest renormalization) → 0.9853 (US+India cross-encoder,
-    118M) → 0.9856 (278M cross-encoder).
+    118M) → 0.9856 (278M cross-encoder) → 0.9870 (full-universe competition context, 892k training records).
 - **Unseen-country rehearsal:** fit on US only and score India. Band rescoring lifts India from 0.9511 to 0.9588 and
   the full decision stack to 0.9595.
 - **Common false positives:** near-twin decoy businesses at almost the same address (house 4445 vs 4448); unowned
