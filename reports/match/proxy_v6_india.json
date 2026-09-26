@@ -1,0 +1,12 @@
+{
+  "name": "v6",
+  "holdout": "India",
+  "policy": {
+    "decision_winner": "prior_tilted_exact_f05",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.73
+  },
+  "held_pairs": 4957680,
+  "train_final_macro_f05": 0.984354604867283,
+  "scores": "C:\\Users\\USER\\Code\\amazon-ml-challenge\\artifacts\\match\\proxy_v6_india.parquet"
+}

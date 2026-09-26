@@ -1,0 +1,41 @@
+{
+  "name": "v6",
+  "band": [
+    0.2,
+    0.9
+  ],
+  "exr": true,
+  "sc": true,
+  "band_pairs": 153637,
+  "coef": [
+    0.9262602997144868,
+    0.9811820542470301,
+    1.7177650032284735,
+    -0.1365224700546028,
+    -0.033049410630074605,
+    -0.28780828170613854
+  ],
+  "policy": {
+    "decision_winner": "prior_tilted_exact_f05",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.67
+  },
+  "final_macro_f05": 0.9838580767807177,
+  "by_country": {
+    "India": 0.9810391432078627,
+    "US": 0.9857402782347902
+  },
+  "stages": {
+    "0_threshold_0.5_no_exclusivity": 0.9825555058740457,
+    "1_threshold_0.5_plus_exclusivity": 0.9825555058740457,
+    "2a_tuned_global_threshold": 0.9837697331844439,
+    "2b_per_entity_expected_f05": 0.9837804220097621,
+    "2c_exact_expected_f05": 0.9837849728362351,
+    "2b_per_entity_scarcity_exclusivity": 0.9837804220097621,
+    "2d_prior_tilted_exact_f05": 0.9838580767807177,
+    "2e_capped_tuned_threshold": 0.983772464340551,
+    "2f_expected_count_topk": 0.9027530401061633,
+    "2g_prior_matched_threshold": 0.9760270641076059,
+    "3_final": 0.9838580767807177
+  }
+}

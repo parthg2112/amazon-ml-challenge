@@ -1,0 +1,38 @@
+{
+  "n_records": 442233,
+  "deployed_full": 0.9813812945445998,
+  "threshold_full": 0.9812217551675247,
+  "hybrid_full": 0.981429961384964,
+  "links_per_s1": {
+    "deployed": 3.3455983610449693,
+    "threshold": 3.359758317448042
+  },
+  "twin": {
+    "n_pairs": 1413507,
+    "tp": 773521,
+    "fp": 4379,
+    "fn": 25815,
+    "tn": 609792
+  },
+  "twin_trust_all": {
+    "new_tp": 25815,
+    "new_fp": 609792
+  },
+  "twin_promote_p03": {
+    "new_fp": 14346
+  },
+  "ledger_q_addr_empty": [
+    {
+      "q_addr_empty": false,
+      "n": 442095,
+      "share": 0.9997,
+      "f05": 0.98138
+    },
+    {
+      "q_addr_empty": true,
+      "n": 138,
+      "share": 0.0003,
+      "f05": 0.98227
+    }
+  ]
+}

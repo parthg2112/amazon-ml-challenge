@@ -1,0 +1,15 @@
+{
+  "name": "v6",
+  "test_s1": 1732544,
+  "scored_pairs": 34650880,
+  "predicted_pairs": 5728827,
+  "s1_with_matches": 1634061,
+  "policy": {
+    "decision_winner": "prior_tilted_exact_f05",
+    "exclusivity_winner": "max_probability",
+    "threshold": 0.69
+  },
+  "ctx_parts": 3,
+  "links_per_s1": 3.306598273983229,
+  "prior_links_per_s1": 3.461252634445658
+}
