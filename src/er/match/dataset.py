@@ -244,11 +244,13 @@ class Universe:
             parts.append(pl.read_parquet(path))
         return pl.concat(parts, how="diagonal_relaxed")
 
-    def subset_features(self, ids: pl.Series, tag: str, gctx: pl.DataFrame | None = None) -> pl.DataFrame:
+    def subset_features(self, ids: pl.Series, tag: str, gctx: pl.DataFrame | None = None,
+                        collect: bool = True) -> pl.DataFrame | None:
         """Features for an arbitrary S1 subset, cached per chunk under a distinct tag (never collides with
         the val-scope caches: a full-scope context changes competitor features, and a subset cache holds
         non-val rows that a `val_features` read must never silently pick up). Carries cv_fold + label so
-        the streaming CV can train fold-by-fold without assembling the full frame in RAM."""
+        the streaming CV can train fold-by-fold without assembling the full frame in RAM.
+        `collect=False` only builds the caches: the full-scope frame (~9 GB) plus its context does not fit."""
         from er.blocking import ranker
 
         split_df = load_split().select("s1_id", "cv_fold")
@@ -270,8 +272,11 @@ class Universe:
                 df.write_parquet(tmp)
                 tmp.replace(path)
                 print(f"  features[{tag}] chunk {i}: {df.height:,} rows in {time.perf_counter() - t0:.0f}s", flush=True)
-            parts.append(pl.read_parquet(path))
-        return pl.concat(parts, how="diagonal_relaxed")
+                del df
+                gc.collect()
+            if collect:
+                parts.append(pl.read_parquet(path))
+        return pl.concat(parts, how="diagonal_relaxed") if collect else None
 
     def chunk_paths(self, tag: str) -> list[Path]:
         return sorted(self.dir.glob(f"features_v{FEATURE_VERSION}_{tag}_*.parquet"))

@@ -135,11 +135,25 @@ def country_transfer(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: p
             "policy": block["policy"]}
 
 
+def full_scope_extras(cfg: dict, cap: int, seed: int = 0) -> pl.Series:
+    """Train-fold S1 clean for training: not the ranker's subset (in-sample p) and not the dense fine-tune's S1
+    (in-sample dense cosine; `train_dense.training_links` replays that draw). Seeded sample of `cap`."""
+    from er.blocking.train_dense import training_links
+
+    sp = load_split()
+    rsub = cfg["ranker"].get("train_subset", "rtrain")
+    seen = pl.concat([subset_ids(sp, rsub), training_links(600_000, rsub)["s1_id"]]).implode()
+    pool = subset_ids(sp, "train")
+    pool = pool.filter(~pool.is_in(seen))
+    return pool.sample(n=min(cap, pool.len()), seed=seed).sort()
+
+
 def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False, scope: str = "val",
         backend: str = "xgb_gpu", relative: bool = True, drop_groups: tuple[str, ...] = (),
-        train_scope: str = "val", macro_weight: bool = False) -> dict:
-    """train_scope "val": the M5-clean val-only fit. "expanded": full-scope context + val + clean rtrain12
-    S1s (ranker's own 44k sample excluded: its p is in-sample), trained with per-fold streaming CV."""
+        train_scope: str = "val", macro_weight: bool = False, fu_extras: int = 450_000) -> dict:
+    """train_scope "val": the M5-clean val-only fit. "expanded": context over val + rtrain12 chunks, trained on val
+    + clean rtrain12 S1 (ranker's own sample excluded). "full": context over all train S1, trained on val +
+    `fu_extras` clean train-fold S1 (`full_scope_extras`). Non-val scopes use per-fold streaming CV."""
     t0 = time.perf_counter()
     truth = io.load_truth()
     if train_scope == "val":
@@ -160,23 +174,29 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
         block = _fit_block(df, y, feats, truth, backend)
         print(f"CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
     else:
-        uni = Universe(config_path, "train", k, "val")
         split_df = load_split()
-        extra = subset_ids(split_df, "rtrain12")
-        extra = extra.filter(~extra.is_in(subset_ids(split_df, "rtrain").implode()))
+        if train_scope == "expanded":
+            uni = Universe(config_path, "train", k, "val")
+            extra = subset_ids(split_df, "rtrain12")
+            extra = extra.filter(~extra.is_in(subset_ids(split_df, "rtrain").implode()))
+            uni.extend_chunks(extra)
+            tag = "ex"
+        else:  # "full": competitors are all train S1, as at test, so test scores at 1 partition (M1 at the source)
+            uni = Universe(config_path, "train", k, "full")
+            extra = full_scope_extras(uni.cfg, fu_extras)
+            tag = "fu"
         ids = pl.concat([subset_ids(split_df, "val"), extra])
-        uni.extend_chunks(extra)
         uni.shortlists()
         feats = features.NUMERIC_FEATURES + uni.extra_features() + (features.REL_FEATURES if relative else [])
         feats = features.apply_drop_groups(feats, drop_groups)
-        tag = "ex"
-        uni.subset_features(ids, tag, uni.global_context())  # builds/loads caches; df freed right after
+        uni.subset_features(ids, tag, uni.global_context(), collect=False)  # caches only; CV streams them
         del ids, extra
         gc.collect()
         paths = uni.chunk_paths(tag)
+        context_s1 = sum(c.len() for c in uni.chunks)  # what ctx_parts must density-match at test
         train_universe = sum(pl.read_parquet(p, columns=["s1_id"])["s1_id"].n_unique() for p in paths)
-        print(f"expanded training: {len(paths)} chunk caches, {train_universe:,} S1, {len(feats)} features, "
-              f"dropped groups {list(drop_groups) or 'none'}", flush=True)
+        print(f"{train_scope} training: {len(paths)} chunk caches, {train_universe:,} S1 (context {context_s1:,}), "
+              f"{len(feats)} features, dropped groups {list(drop_groups) or 'none'}", flush=True)
         t_cv = time.perf_counter()
         block = _fit_block_stream(paths, feats, truth, backend, macro_weight)
         print(f"streaming CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
@@ -187,16 +207,19 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
         sub = block["oof"].filter(pl.col("q_country") == c)
         t_sub = truth.filter(pl.col("s1_id").is_in(sub["s1_id"].unique().implode()))
         by_country[c] = macro_f05(t_sub, _policy_predict(sub, block["policy"]))
-    if train_scope != "val":
-        # transfer checks need the frame: reload from caches (caches carry label + fold)
-        paths = uni.chunk_paths("ex")
-        df = features.add_relative(pl.concat(pl.read_parquet(p) for p in paths))
-        y = df["y"].to_numpy()
+    if train_scope == "val":
+        n_pairs, pos_rate = df.height, float(y.mean())
+    else:
+        ys = pl.concat(pl.read_parquet(p, columns=["y"]) for p in paths)["y"]
+        n_pairs, pos_rate = ys.len(), float(ys.mean())
+        if transfer:  # transfer checks need the frame: reload from caches (caches carry label + fold)
+            df = features.add_relative(pl.concat(pl.read_parquet(p) for p in paths))
+            y = df["y"].to_numpy()
     result = {
         "name": name, "config": config_path, "k": k,
-        "scope": "full" if train_scope != "val" else scope, "backend": backend,
-        "train_scope": train_scope, "val_pairs": df.height, "pos_rate": float(y.mean()),
-        "train_universe_s1": block["oof"]["s1_id"].n_unique() if train_scope != "val" else None,
+        "scope": scope if train_scope == "val" else train_scope, "backend": backend,
+        "train_scope": train_scope, "val_pairs": n_pairs, "pos_rate": pos_rate,
+        "train_universe_s1": context_s1 if train_scope != "val" else None,
         "features": feats, "drop_groups": list(drop_groups),
         "policy": block["policy"], "stages": block["decision"]["stages"],
         "final_macro_f05": block["decision"]["final"]["macro_f05"], "by_country_frozen_policy": by_country,
@@ -210,7 +233,7 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
         gc.collect()
     MODELS.mkdir(parents=True, exist_ok=True)
     bundle = {"models": block["models"], "iso": block["iso"], "features": feats, "policy": block["policy"],
-              "config": config_path, "k": k, "scope": "full" if train_scope != "val" else scope,
+              "config": config_path, "k": k, "scope": result["scope"],
               "train_universe_s1": result["train_universe_s1"]}
     (MODELS / f"{name}.pkl").write_bytes(pickle.dumps(bundle))
     block["oof"].write_parquet(io.ARTIFACTS / "match" / f"oof_{name}.parquet", mkdir=True)

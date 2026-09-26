@@ -15,14 +15,19 @@ from er.split import load_split, subset_ids
 OUT = io.ARTIFACTS / "models"
 
 
-def training_pairs(n_pairs: int, ranker_subset: str, seed: int = 0) -> pl.DataFrame:
-    """One random true target per S1 (MNRL treats other in-batch rows as negatives, so no S1 may repeat)."""
+def training_links(n_pairs: int, ranker_subset: str, seed: int = 0) -> pl.DataFrame:
+    """The (s1_id, target_id) links the fine-tune sees: deterministic, so later stages can exclude those S1."""
     split = load_split()
     excluded = subset_ids(split, ranker_subset).implode()
     ids = subset_ids(split, "train").filter(~subset_ids(split, "train").is_in(excluded))
     links = io.truth_long(io.load_truth().filter(pl.col("s1_id").is_in(ids.implode())))
     links = links.sample(fraction=1.0, shuffle=True, seed=seed).unique("s1_id", keep="first", maintain_order=True)
-    links = links.head(n_pairs)
+    return links.head(n_pairs)
+
+
+def training_pairs(n_pairs: int, ranker_subset: str, seed: int = 0) -> pl.DataFrame:
+    """One random true target per S1 (MNRL treats other in-batch rows as negatives, so no S1 may repeat)."""
+    links = training_links(n_pairs, ranker_subset, seed)
     s1 = io.load_source("train", "S1").rename({"entity_id": "s1_id"})
     tg = pl.concat([io.load_source("train", s) for s in io.TARGET_SOURCES]).rename({"entity_id": "target_id"})
     q = links.select("s1_id").join(s1, on="s1_id", how="left", maintain_order="left")

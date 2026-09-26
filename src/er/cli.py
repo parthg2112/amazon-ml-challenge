@@ -161,7 +161,7 @@ def cmd_fit2(args: argparse.Namespace) -> None:
 
     r = v2.fit(args.config, args.k, args.name, transfer=args.transfer, scope=args.scope,
                backend=args.backend, drop_groups=tuple(args.drop_groups), train_scope=args.train_scope,
-               macro_weight=args.macro_weight)
+               macro_weight=args.macro_weight, fu_extras=args.fu_extras)
     keep = ("final_macro_f05", "by_country_frozen_policy", "policy", "country_transfer", "total_s")
     print(json.dumps({k: r.get(k) for k in keep}, indent=2, default=str))
 
@@ -349,8 +349,10 @@ def main() -> None:
     sp.add_argument("--transfer", action="store_true", help="also run leave-country-out transfer checks")
     sp.add_argument("--drop-groups", nargs="*", default=[], choices=sorted(features.FEATURE_GROUPS),
                     help="feature groups to drop for the transfer ablation (see features.FEATURE_GROUPS)")
-    sp.add_argument("--train-scope", default="val", choices=["val", "expanded"],
-                    help="val: M5-clean val-only fit; expanded: full-scope context + clean rtrain12 S1s, streaming CV")
+    sp.add_argument("--train-scope", default="val", choices=["val", "expanded", "full"],
+                    help="val: M5-clean val-only fit; expanded: val + clean rtrain12 S1s; full: context over all train "
+                         "S1 + clean train-fold extras (streaming CV)")
+    sp.add_argument("--fu-extras", type=int, default=450_000, help="full scope: clean extra training S1 to sample")
     sp.add_argument("--scope", default="val", choices=["val", "full"], help="competitor universe for context")
     sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "lgbm"])
     sp.add_argument("--macro-weight", action="store_true", help="expanded scope: weight pairs 1/max(links, 1) per S1")
