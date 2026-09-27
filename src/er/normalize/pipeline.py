@@ -13,7 +13,7 @@ from pathlib import Path
 import polars as pl
 
 from er import io
-from er.normalize.address import normalize_address
+from er.normalize.address import normalize_address, street_line
 from er.normalize.names import normalize_name
 from er.normalize.profiles import profile_for
 from er.normalize.text import is_native_script
@@ -29,9 +29,7 @@ class NormConfig:
 
     @property
     def variant(self) -> str:
-        # Bump when the normalized-record schema changes so an older parquet cache cannot
-        # silently omit a newly added field.
-        v = f"v2-t{int(self.translit)}-{self.profile_mode}"
+        v = f"t{int(self.translit)}-{self.profile_mode}"
         if self.learned:
             v += "-" + Path(self.learned).stem
         return v
@@ -74,7 +72,7 @@ SCHEMA = {
     "profile": pl.Utf8, "name_native": pl.Boolean, "name_full": pl.Utf8, "name_core": pl.Utf8,
     "name_legal": pl.Utf8, "name_sorted": pl.Utf8, "name_concat": pl.Utf8, "name_fold": pl.Utf8,
     "name_alts": pl.List(pl.Utf8), "name_domain": pl.Boolean, "addr_norm": pl.Utf8,
-    "addr_content": pl.Utf8, "addr_street": pl.Utf8, "addr_region": pl.Utf8, "addr_house": pl.Utf8,
+    "addr_content": pl.Utf8, "addr_region": pl.Utf8, "addr_house": pl.Utf8,
     "addr_numbers": pl.List(pl.Utf8), "addr_postal": pl.Utf8, "addr_city": pl.Utf8,
     "addr_unit": pl.Utf8, "addr_landmark": pl.Utf8, "addr_empty": pl.Boolean,
     "name_min": pl.Utf8, "name_min_key": pl.Utf8,
@@ -119,3 +117,36 @@ def normalize_source(split: str, src: str, cfg: NormConfig, workers: int | None 
 
 def load_norm(split: str, src: str, cfg: NormConfig) -> pl.DataFrame:
     return pl.read_parquet(normalize_source(split, src, cfg))
+
+
+# Opt-in side table for contest features: its own file and version, so the main normalized records (and every
+# cache keyed on the variant) are untouched when it is added or changed.
+STREET_VERSION = 1
+
+
+def _street_shard(args: tuple[str, int, int, dict]) -> pl.DataFrame:
+    path, offset, length, cfg_d = args
+    cfg = NormConfig(**cfg_d)
+    df = pl.scan_parquet(path).slice(offset, length).collect()
+    vals = [street_line(a, profile_for(c, cfg.profile_mode), cfg.translit)
+            for a, c in zip(df["business_address"], df["country"])]
+    return df.select("entity_id").with_columns(pl.Series("addr_street", vals, dtype=pl.Utf8))
+
+
+def load_street(split: str, src: str, cfg: NormConfig, workers: int | None = None) -> pl.DataFrame:
+    """entity_id + addr_street (`address.street_line`), cached per split/source beside the variant's records."""
+    out = io.ARTIFACTS / "norm" / cfg.variant / f"street_v{STREET_VERSION}_{split}_{src}.parquet"
+    if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        path = str(io.parquet_path(split, src))
+        n = pl.scan_parquet(path).select(pl.len()).collect().item()
+        tasks = [(path, off, SHARD_ROWS, asdict(cfg)) for off in range(0, n, SHARD_ROWS)]
+        t0 = time.perf_counter()
+        os.environ["POLARS_MAX_THREADS"] = "1"
+        with ProcessPoolExecutor(max_workers=workers or io.THREADS) as ex:
+            parts = list(ex.map(_street_shard, tasks))
+        tmp = out.with_suffix(".partial")
+        pl.concat(parts).write_parquet(tmp)
+        tmp.replace(out)
+        print(f"street view {split}_{src} [{cfg.variant}] {n:,} rows in {time.perf_counter() - t0:.1f}s")
+    return pl.read_parquet(out)

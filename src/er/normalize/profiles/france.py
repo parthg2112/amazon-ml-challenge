@@ -57,7 +57,7 @@ PROFILE = Profile(
     postal_before_city=True,
     apostrophe_splits=True,
     extra_stopwords=frozenset({"a", "au", "aux", "en", "sur"}),
-    # "saint" is an address word (Rue Saint-Joseph), not a street type.  It remains in
-    # _STREET so ST.- variants canonicalize to saint, but must survive content extraction.
+    # "saint" is a street-name word (Rue Saint-Joseph), not a street type; kept in _STREET so ST.- variants
+    # canonicalize to saint.
     street_content_keep=frozenset({"saint", "sainte"}),
 )
