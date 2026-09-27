@@ -59,9 +59,6 @@ def test_street_canon_and_house():
     fr = rec("x", "Nº 9 R LOUIS SPRIET, LILLE, Hauts-de-France", "France")
     assert fr["addr_house"] == "9" and "9 rue louis spriet lille fr_hdf" in fr["addr_norm"]
     assert rec("x", "12 Rue X, ST.-NAZAIRE", "France")["addr_norm"] == "12 rue x saint nazaire"
-    saint = rec("x", "3 Rue Saint-Joseph, Bordeaux", "France")
-    assert "saint" in saint["addr_content"]
-    assert saint["addr_street"] == "saint joseph"
 
 
 def test_postal():

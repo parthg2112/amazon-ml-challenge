@@ -148,6 +148,14 @@ class Universe:
             del cands, queries, ranked, pairs, j
             gc.collect()
 
+    def shortlist_paths(self) -> list[Path]:
+        """All pass-1 shortlist files of this universe; raises if any chunk was never built."""
+        paths = [self._shortlist_path(i, c) for i, c in enumerate(self.chunks)]
+        missing = [p for p in paths if not p.exists()]
+        if missing:
+            raise FileNotFoundError(f"{len(missing)} of {len(paths)} shortlist chunks missing (run shortlists())")
+        return paths
+
     def shortlist(self, i: int) -> pl.DataFrame:
         return pl.read_parquet(self._shortlist_path(i, self.chunks[i]))
 

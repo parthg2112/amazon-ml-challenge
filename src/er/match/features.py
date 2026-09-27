@@ -18,7 +18,7 @@ from er.match.idf import WordIdf, token_overlap_features
 
 JOIN_COLS = [
     "name_native", "name_full", "name_core", "name_legal", "name_concat", "name_fold", "name_alts",
-    "name_domain", "addr_content", "addr_street", "addr_region", "addr_house", "addr_numbers", "addr_postal",
+    "name_domain", "addr_content", "addr_region", "addr_house", "addr_numbers", "addr_postal",
     "addr_city", "addr_unit", "addr_landmark", "addr_empty", "country", "name_min", "name_min_key",
 ]
 

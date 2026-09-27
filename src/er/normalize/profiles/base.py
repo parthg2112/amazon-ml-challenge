@@ -29,8 +29,8 @@ class Profile:
     postal_before_city: bool = False  # "59000 LILLE"
     apostrophe_splits: bool = False  # French elision: l'avenue → l avenue
     extra_stopwords: frozenset[str] = field(default_factory=frozenset)
-    # Canonicalized address tokens which look like street markers but are meaningful street words.
-    # They are retained in addr_content / addr_street rather than being stripped with "rue", "av", etc.
+    # Street-type tokens that are also street-name words; kept by `address.street_line` only (addr_content
+    # is unchanged so the scorer's features and caches stay valid).
     street_content_keep: frozenset[str] = field(default_factory=frozenset)
 
 

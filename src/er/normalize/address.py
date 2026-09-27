@@ -37,7 +37,7 @@ def _regions(profile: Profile, translit: bool) -> tuple[dict[str, str], int]:
 
 def _street_canon(profile: Profile) -> frozenset[str]:
     if profile.name not in _CANON_CACHE:
-        _CANON_CACHE[profile.name] = frozenset(profile.street.values()) - profile.street_content_keep
+        _CANON_CACHE[profile.name] = frozenset(profile.street.values())
     return _CANON_CACHE[profile.name]
 
 
@@ -67,11 +67,37 @@ def _content_filter(toks: list[str], region: str, canon: frozenset[str]) -> list
             and t not in canon and len(t) > 1]
 
 
+def street_line(raw: str | None, profile: Profile, translit: bool = True) -> str:
+    """Street words of the segment that holds the house number (fallback: a segment with a street type).
+
+    Not "the first comma segment": copies shuffle segments ("Bordeaux, Nouvelle-Aquitaine, 3 AV Louis
+    Barthou"). Kept out of `normalize_address` so the scorer's normalized fields stay byte-identical.
+    `profile.street_content_keep` words (French saint/sainte) survive here, unlike in addr_content."""
+    text = base_text(raw, translit, profile.apostrophe_splits)
+    if not text.strip(" ,"):
+        return ""
+    postal = _postal(text, profile)
+    segs = [[profile.street.get(t, t) for t in tokens(s)] for s in text.split(",")]
+    types = _street_canon(profile)
+    keep = types - profile.street_content_keep
+
+    def words(i: int) -> list[str]:
+        return _content_filter(segs[i], "", keep)
+
+    m = _HOUSE_MARKER.search(text) or _SEGMENT_NUMBER.search(text)
+    if m and m.group(1).lstrip("0") != postal.lstrip("0"):
+        found = words(text[:m.start(1)].count(","))
+        if found:
+            return " ".join(found)
+    idx = next((i for i, s in enumerate(segs) if any(t in types for t in s)), None)  # "17" alone in its segment
+    return " ".join(words(idx)) if idx is not None else ""
+
+
 def normalize_address(raw: str | None, profile: Profile, translit: bool = True,
                       region_map: dict[str, str] | None = None) -> dict:
     text = base_text(raw, translit, profile.apostrophe_splits)
     if not text.strip(" ,"):
-        return {"addr_norm": "", "addr_content": "", "addr_street": "", "addr_region": "", "addr_house": "",
+        return {"addr_norm": "", "addr_content": "", "addr_region": "", "addr_house": "",
                 "addr_numbers": [], "addr_postal": "", "addr_city": "", "addr_unit": "",
                 "addr_landmark": "", "addr_empty": True}
 
@@ -149,14 +175,9 @@ def normalize_address(raw: str | None, profile: Profile, translit: bool = True,
     landmark = " ".join(landmark_toks)
 
     content = _content_filter(flat, region, canon)
-    # The first address segment is the street line for the challenge's comma-separated addresses.
-    # Keep it separately: city agreement is useful elsewhere, but must not drown the street-name
-    # signal when several S1 records contest one target.
-    street_content = _content_filter(flat_segs[0], region, canon) if flat_segs else []
     return {
         "addr_norm": " ".join(flat),
         "addr_content": " ".join(content),
-        "addr_street": " ".join(street_content),
         "addr_region": region,
         "addr_house": house,
         "addr_numbers": numbers,
