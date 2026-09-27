@@ -49,9 +49,10 @@ def _policy_predict(scored: pl.DataFrame, policy: dict, n_s1: int | None = None)
 
 
 def _fit_block(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: pl.DataFrame,
-               backend: str = "xgb_gpu") -> dict:
+               backend: str = "xgb_gpu", mask: train.GroupMask | None = None) -> dict:
     """CV + calibration + Step 5 policy on one set of rows: everything a frozen deployment needs."""
-    oof, models, imp = train.cv_train(df, y, "cv_fold", feats, features.CATEGORICAL_FEATURES, backend=backend)
+    oof, models, imp = train.cv_train(df, y, "cv_fold", feats, features.CATEGORICAL_FEATURES, backend=backend,
+                                      mask=mask)
     calibrated, calib, iso = train.maybe_calibrate(y, oof)
     oof_df = df.select("s1_id", "target_id", "src", "q_country").with_columns(pl.Series("p", calibrated))
     decision = pipeline.run(oof_df, truth)
@@ -62,7 +63,8 @@ def _fit_block(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: pl.Data
 
 
 def _fit_block_stream(paths: list, feats: list[str], truth: pl.DataFrame, backend: str = "xgb_gpu",
-                      macro_weight: bool = False) -> dict:
+                      macro_weight: bool = False, mask: train.GroupMask | None = None,
+                      where: pl.Expr | None = None) -> dict:
     """Same contract as `_fit_block` for training sets too big for RAM: per fold, read only that fold's
     rows from the chunk caches (features + label + cv_fold live in the caches), fit, predict, free.
     Peak RAM = one fold's matrix instead of the whole frame. REL features are recomputed per fold —
@@ -80,11 +82,13 @@ def _fit_block_stream(paths: list, feats: list[str], truth: pl.DataFrame, backen
     for f in folds:
         tr_parts, va_parts = [], []
         for p in paths:
-            chunk = pl.read_parquet(p)
+            chunk = pl.read_parquet(p) if where is None else pl.read_parquet(p).filter(where)
             tr_parts.append(chunk.filter(pl.col("cv_fold") != f))
             va_parts.append(chunk.filter(pl.col("cv_fold") == f))
         tr = features.add_relative(pl.concat(tr_parts))
         Xtr = train.matrix(tr, feats)
+        if mask is not None:
+            mask.apply(Xtr, feats, tr["s1_id"], int(f))
         ytr, wtr = tr["y"].to_numpy(), weights(tr)
         del tr, tr_parts
         gc.collect()
@@ -121,10 +125,10 @@ def _score(block: dict, X: np.ndarray) -> np.ndarray:
 
 
 def country_transfer(df: pl.DataFrame, y: np.ndarray, feats: list[str], truth: pl.DataFrame,
-                     holdout: str, backend: str = "xgb_gpu") -> dict:
+                     holdout: str, backend: str = "xgb_gpu", mask: train.GroupMask | None = None) -> dict:
     """France protocol: fit + calibrate + tune policy WITHOUT `holdout`, apply frozen to it (review M4)."""
     other = (df["q_country"] != holdout).to_numpy()
-    block = _fit_block(df.filter(pl.Series(other)), y[other], feats, truth, backend)
+    block = _fit_block(df.filter(pl.Series(other)), y[other], feats, truth, backend, mask)
     held = df.filter(pl.Series(~other))
     p = _score(block, train.matrix(held, feats))
     scored = held.select("s1_id", "target_id", "src").with_columns(pl.Series("p", p))
@@ -150,12 +154,14 @@ def full_scope_extras(cfg: dict, cap: int, seed: int = 0) -> pl.Series:
 
 def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False, scope: str = "val",
         backend: str = "xgb_gpu", relative: bool = True, drop_groups: tuple[str, ...] = (),
-        train_scope: str = "val", macro_weight: bool = False, fu_extras: int = 450_000) -> dict:
+        train_scope: str = "val", macro_weight: bool = False, fu_extras: int = 450_000,
+        mask_groups: tuple[str, ...] = (), mask_rate: float = 0.0) -> dict:
     """train_scope "val": the M5-clean val-only fit. "expanded": context over val + rtrain12 chunks, trained on val
     + clean rtrain12 S1 (ranker's own sample excluded). "full": context over all train S1, trained on val +
     `fu_extras` clean train-fold S1 (`full_scope_extras`). Non-val scopes use per-fold streaming CV."""
     t0 = time.perf_counter()
     truth = io.load_truth()
+    mask = train.GroupMask(tuple(mask_groups), mask_rate) if mask_groups and mask_rate > 0 else None
     if train_scope == "val":
         uni = Universe(config_path, "train", k, scope)
         uni.shortlists()
@@ -171,7 +177,7 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
               f"dropped groups {list(drop_groups) or 'none'}", flush=True)
 
         t_cv = time.perf_counter()
-        block = _fit_block(df, y, feats, truth, backend)
+        block = _fit_block(df, y, feats, truth, backend, mask)
         print(f"CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
     else:
         split_df = load_split()
@@ -198,7 +204,7 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
         print(f"{train_scope} training: {len(paths)} chunk caches, {train_universe:,} S1 (context {context_s1:,}), "
               f"{len(feats)} features, dropped groups {list(drop_groups) or 'none'}", flush=True)
         t_cv = time.perf_counter()
-        block = _fit_block_stream(paths, feats, truth, backend, macro_weight)
+        block = _fit_block_stream(paths, feats, truth, backend, macro_weight, mask)
         print(f"streaming CV + policy in {time.perf_counter() - t_cv:.0f}s", flush=True)
         df = None
         y = None
@@ -221,19 +227,20 @@ def fit(config_path: str, k: int = 10, name: str = "v2", transfer: bool = False,
         "train_scope": train_scope, "val_pairs": n_pairs, "pos_rate": pos_rate,
         "train_universe_s1": context_s1 if train_scope != "val" else None,
         "features": feats, "drop_groups": list(drop_groups),
+        "group_mask": mask.to_json() if mask else None,
         "policy": block["policy"], "stages": block["decision"]["stages"],
         "final_macro_f05": block["decision"]["final"]["macro_f05"], "by_country_frozen_policy": by_country,
         "calibration": block["calibration"],
         "importance": sorted(zip(feats, block["importance"].tolist()), key=lambda kv: -kv[1])[:40],
     }
     if transfer:
-        result["country_transfer"] = [country_transfer(df, y, feats, truth, c, backend)
+        result["country_transfer"] = [country_transfer(df, y, feats, truth, c, backend, mask)
                                       for c in df["q_country"].unique().sort().to_list()]
         del df, y
         gc.collect()
     MODELS.mkdir(parents=True, exist_ok=True)
     bundle = {"models": block["models"], "iso": block["iso"], "features": feats, "policy": block["policy"],
-              "config": config_path, "k": k, "scope": result["scope"],
+              "config": config_path, "k": k, "scope": result["scope"], "group_mask": result["group_mask"],
               "train_universe_s1": result["train_universe_s1"]}
     (MODELS / f"{name}.pkl").write_bytes(pickle.dumps(bundle))
     block["oof"].write_parquet(io.ARTIFACTS / "match" / f"oof_{name}.parquet", mkdir=True)

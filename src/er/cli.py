@@ -161,9 +161,17 @@ def cmd_fit2(args: argparse.Namespace) -> None:
 
     r = v2.fit(args.config, args.k, args.name, transfer=args.transfer, scope=args.scope,
                backend=args.backend, drop_groups=tuple(args.drop_groups), train_scope=args.train_scope,
-               macro_weight=args.macro_weight, fu_extras=args.fu_extras)
+               macro_weight=args.macro_weight, fu_extras=args.fu_extras, mask_groups=tuple(args.mask_groups),
+               mask_rate=args.mask_rate)
     keep = ("final_macro_f05", "by_country_frozen_policy", "policy", "country_transfer", "total_s")
     print(json.dumps({k: r.get(k) for k in keep}, indent=2, default=str))
+
+
+def cmd_proxy(args: argparse.Namespace) -> None:
+    from er.match import proxy
+
+    print(json.dumps(proxy.run(args.name, args.holdout, args.backend, args.arm, tuple(args.mask_groups),
+                               args.mask_rate, tuple(args.add_features)), indent=2, default=str))
 
 
 def cmd_decide2(args: argparse.Namespace) -> None:
@@ -312,6 +320,12 @@ def cmd_learn(args: argparse.Namespace) -> None:
         print(f"  [region] {k} -> {v}")
 
 
+def _add_mask_args(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument("--mask-groups", nargs="*", default=[], choices=sorted(features.MASK_GROUPS),
+                    help="GM: feature groups masked per S1 on training rows (see features.MASK_GROUPS)")
+    sp.add_argument("--mask-rate", type=float, default=0.0, help="GM: share of S1 masked per group")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="er")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -369,7 +383,17 @@ def main() -> None:
     sp.add_argument("--scope", default="val", choices=["val", "full"], help="competitor universe for context")
     sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "lgbm"])
     sp.add_argument("--macro-weight", action="store_true", help="expanded scope: weight pairs 1/max(links, 1) per S1")
+    _add_mask_args(sp)
     sp.set_defaults(fn=cmd_fit2)
+
+    sp = sub.add_parser("proxy", help="unseen-country gate: fit without --holdout, score it frozen, held-out F0.5")
+    sp.add_argument("--name", default="v7", help="bundle whose features and scope caches to use")
+    sp.add_argument("--holdout", default="India")
+    sp.add_argument("--arm", default="base", help="report/scores suffix; compare arms run by this command only")
+    sp.add_argument("--backend", default="xgb_gpu", choices=["xgb_gpu", "xgb_cpu"])
+    sp.add_argument("--add-features", nargs="*", default=[], help="columns to add to the bundle's features")
+    _add_mask_args(sp)
+    sp.set_defaults(fn=cmd_proxy)
 
     sp = sub.add_parser("decide2", help="re-run the Step 5 policy on saved v2 OOF (no retraining)")
     sp.add_argument("--name", default="v2")

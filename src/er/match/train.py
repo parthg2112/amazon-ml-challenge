@@ -7,6 +7,8 @@ could exploit.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 import polars as pl
 from sklearn.calibration import calibration_curve
@@ -37,6 +39,33 @@ XGB_PARAMS = {
 }
 
 
+@dataclass(frozen=True)
+class GroupMask:
+    """Training-only feature-group masking (GM): per group, a hashed `rate` of S1 get the group's columns set
+    to NaN on the training rows of a fold. Early-stopping and OOF rows are never masked, so calibration and
+    the Step 5 policy see deployment inputs. Per S1 (not per row) keeps a record's relative views coherent."""
+
+    groups: tuple[str, ...]
+    rate: float
+    seed: int = 0
+
+    def apply(self, X: np.ndarray, feats: list[str], s1_ids: pl.Series, fold: int) -> np.ndarray:
+        """Masks `X` in place and returns it; `s1_ids` is row-aligned with `X`."""
+        from er.match.features import mask_columns
+
+        for gi, g in enumerate(self.groups):
+            cols = mask_columns(feats, g)
+            if not cols:
+                continue
+            u = (s1_ids.hash(seed=self.seed * 1009 + fold * 31 + gi) % 1_000_000).to_numpy() / 1_000_000
+            rows = np.flatnonzero(u < self.rate)
+            X[np.ix_(rows, cols)] = np.nan
+        return X
+
+    def to_json(self) -> dict:
+        return {"groups": list(self.groups), "rate": self.rate, "seed": self.seed}
+
+
 class XgbModel:
     """Adapter so fold-mean prediction treats XGBoost like a LightGBM Booster (predict + best_iteration)."""
 
@@ -56,7 +85,9 @@ class XgbModel:
 
 
 def cv_train_xgb(X: np.ndarray, y: np.ndarray, fold_arr: np.ndarray, params: dict | None = None,
-                 num_boost_round: int = 1000, early_stopping_rounds: int = 40) -> tuple[np.ndarray, list, np.ndarray]:
+                 num_boost_round: int = 1000, early_stopping_rounds: int = 40, mask: GroupMask | None = None,
+                 feats: list[str] | None = None, s1_ids: pl.Series | None = None
+                 ) -> tuple[np.ndarray, list, np.ndarray]:
     """Same contract as `cv_train`, on the GPU (~10x faster than CPU LightGBM at 9M rows)."""
     import xgboost as xgb
 
@@ -65,7 +96,11 @@ def cv_train_xgb(X: np.ndarray, y: np.ndarray, fold_arr: np.ndarray, params: dic
     models, importances = [], []
     for f in sorted(set(fold_arr.tolist())):
         tr, va = fold_arr != f, fold_arr == f
-        dtr = xgb.QuantileDMatrix(X[tr], label=y[tr], max_bin=params["max_bin"])
+        Xtr = X[tr]  # a copy: masking never touches the rows scored out of fold
+        if mask is not None:
+            mask.apply(Xtr, feats, s1_ids.filter(pl.Series(tr)), int(f))
+        dtr = xgb.QuantileDMatrix(Xtr, label=y[tr], max_bin=params["max_bin"])
+        del Xtr
         dva = xgb.QuantileDMatrix(X[va], label=y[va], ref=dtr)
         booster = xgb.train(params, dtr, num_boost_round=num_boost_round, evals=[(dva, "val")],
                             early_stopping_rounds=early_stopping_rounds, verbose_eval=False)
@@ -117,16 +152,20 @@ def cv_train_cat(X: np.ndarray, y: np.ndarray, fold_arr: np.ndarray, params: dic
 
 def cv_train(df: pl.DataFrame, y: np.ndarray, fold_col: str, feature_names: list[str],
             categorical: list[str], params: dict | None = None, num_boost_round: int = 500,
-            early_stopping_rounds: int = 30, backend: str = "lgbm") -> tuple[np.ndarray, list, np.ndarray]:
+            early_stopping_rounds: int = 30, backend: str = "lgbm",
+            mask: GroupMask | None = None) -> tuple[np.ndarray, list, np.ndarray]:
     """Leave-one-fold-out training; returns out-of-fold probabilities, per-fold boosters, mean gain importance.
 
     backend: "lgbm" (CPU, categorical-aware) | "xgb_gpu" (CUDA; categorical codes are small ordered ints)
-    | "xgb_cpu" (same trees, no CUDA) | "catboost"."""
+    | "xgb_cpu" (same trees, no CUDA) | "catboost". `mask` (GroupMask) is supported on the XGBoost backends."""
+    if mask is not None and backend not in ("xgb_gpu", "xgb_cpu"):
+        raise ValueError(f"group masking needs an XGBoost backend, got {backend!r}")
     if backend in ("xgb_gpu", "xgb_cpu"):
         p = dict(params or {})
         if backend == "xgb_cpu":
             p.setdefault("device", "cpu")
-        return cv_train_xgb(matrix(df, feature_names), y, df[fold_col].to_numpy(), p)
+        return cv_train_xgb(matrix(df, feature_names), y, df[fold_col].to_numpy(), p, mask=mask,
+                            feats=feature_names, s1_ids=df["s1_id"])
     if backend == "catboost":
         return cv_train_cat(matrix(df, feature_names), y, df[fold_col].to_numpy(), params)
     import lightgbm as lgb
