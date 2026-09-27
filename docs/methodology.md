@@ -9,10 +9,11 @@
 ## 1. Executive Summary
 
 A four-stage pipeline: country-aware normalization, a 9-channel blocker with a learned ranker (99.78% of true links kept in
-a top-10-per-source shortlist), a 122-feature XGBoost scorer whose uncertain band (0.2 < p < 0.9) is rescored by a
+a top-10-per-source shortlist), a 122-feature XGBoost scorer whose non-certain band (0.02 < p < 0.995) is rescored by a
 cross-encoder plus sibling-consensus evidence, and a decision layer that renormalizes contested targets and picks each
 record's link set by exact expected F0.5 under a link-count prior. Out-of-fold macro F0.5 on the 442k-record validation holdout
-is 0.9870. Everything is country-agnostic by construction, so it applies unchanged to the unseen test country (France).
+is 0.9900. Everything is country-agnostic by construction. For test countries without labels (France), the cross-encoder
+is also trained on the scorer's own confident pseudo-labels.
 
 ---
 
@@ -32,6 +33,8 @@ is 0.9870. Everything is country-agnostic by construction, so it applies unchang
   not identifiable (base rate ≤7%).
 - **Test differs from validation**: about 1.9× more unowned target records per Source-1 record, 3–20× more contested
   targets (strongest in France), and an unseen country whose scores are flatter (twice the uncertain-band mass).
+  France also has "sibling families" (same name and street, different house number or legal form) on 1.6% of
+  Source-1 records vs 0.02% in training, and ~30× more acronym-only target names.
 
 ### 2.2 Solution Strategy
 
@@ -79,10 +82,18 @@ link set maximizes expected F0.5 under the known link-count prior. The same mach
 - **Pair scorer:** XGBoost (GPU), 5-fold CV grouped by Source-1 record, trained on 892k records (validation holdout +
   450k clean training records). Competition features (claimants, rival margins) are computed over all 2.2M training
   records, the same density as the full test universe. Test predictions average the fold models.
-- **Band rescorer:** for 0.2 < p < 0.9, a logistic model on [logit p, tanh(cross-encoder logit / 2), sibling-consensus
-  features]. It is cross-fitted by fold and excludes every record the cross-encoder was trained on.
-  - The cross-encoder is multilingual-e5-base (278M, MIT) fine-tuned on 1.42M US+India pairs from the ranker's training subset,
-    never the validation records.
+- **Band rescorer:** for 0.02 < p < 0.995, a small XGBoost model (300 trees, depth 5) on [logit p,
+  tanh(cross-encoder logit / 2), sibling-consensus features, raw name and address features]. It is cross-fitted by fold and excludes
+  every record the cross-encoder was trained on.
+  - Raw-name features: whether the two raw names agree after case and whitespace folding, with the legal form kept, and
+    how many Source-1 records of the country carry each raw name. Normalization merges same-key twins; copies keep the
+    owner's raw form. When exactly one claimant's raw name matches, it owns the target 98% of the time.
+  - The cross-encoder is multilingual-e5-base (278M, MIT) trained on 5.9M pairs. 4.2M are labeled US+India pairs
+    (all true links plus hard and random blocker negatives) from training records the scorer's out-of-fold set never
+    contains.
+  - The other 1.73M are pseudo-labels for test records whose country label has no training labels: the scorer's winners
+    with p ≥ 0.95 vs rejects with p ≤ 0.02 in the same shortlists. Adapting on such labels gains +0.0029 on the India
+    rehearsal. Synthetic noisy copies were tried and rejected (they hurt the rehearsal).
   - Sibling consensus: a band target whose house number differs from the Source-1 record's but equals that of a
     confident sibling link is 89% true.
 
@@ -98,12 +109,15 @@ link set maximizes expected F0.5 under the known link-count prior. The same mach
 
 ## 5. Results & Error Analysis
 
-- **F_0.5 score (macro, out-of-fold, 442k-record validation holdout):** 0.9870.
+- **F_0.5 score (macro, out-of-fold, 442k-record validation holdout):** 0.9882.
   - Progression: 0.9812 (base scorer) → 0.9819 (twin features + 40% more training data) → 0.9837 (band rescoring with a
     US-only cross-encoder, + sibling consensus, + contest renormalization) → 0.9853 (US+India cross-encoder,
-    118M) → 0.9856 (278M cross-encoder) → 0.9870 (full-universe competition context, 892k training records).
+    118M) → 0.9856 (278M cross-encoder) → 0.9870 (full-universe competition context, 892k training records) →
+    0.9881 (wide band, XGBoost combiner) → 0.9882 (France-adapted cross-encoder; its gain is on France) → 0.9888
+    (raw-name features) → 0.9889 (raw-address features; India rehearsal +0.0011 for both) → 0.9900 (cross-encoder
+    trained on 4× more labeled pairs plus the pseudo-labels).
 - **Unseen-country rehearsal:** fit on US only and score India. Band rescoring lifts India from 0.9511 to 0.9588 and
-  the full decision stack to 0.9595.
+  the full decision stack to 0.9595; pseudo-label adaptation of the cross-encoder adds +0.0029 (0.9591 → 0.9620).
 - **Common false positives:** near-twin decoy businesses at almost the same address (house 4445 vs 4448); unowned
   duplicate listings with byte-identical name and address; contested targets where a rival record is the true owner.
 - **Common false negatives:** identical-name twins whose target has no address and whose name is shared by many
@@ -128,7 +142,7 @@ from the given fields.
 
 `code/business_entity_resolution/` ships `src/er/` (package), `configs/`, `README.md` and `requirements.txt` (pinned via
 `uv export`). The README lists the end-to-end command chain:
-- `prepare` → `split` → `normalize` → `finetune` → `fit2` → `ce-train` → `ce-band` → `submit2` → `decide-test`;
+- `prepare` → `split` → `normalize` → `finetune` → `fit2` → `submit2` → `ce-train-mix` → `ce-band` → `decide-test`;
 - it produces `output/matching_results.tsv` and `output/candidate_pairs.tsv`, which pass
   `student_resource/utils/validate_submission.py`.
 

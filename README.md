@@ -34,9 +34,9 @@ uv run er prepare; uv run er split
 uv run er learn; uv run er normalize --learned configs/learned/n4_v1.json   # norm variant t1-auto-n4_v1
 uv run er finetune --name e5s_ft1                     # dense retriever: multilingual-e5-small (MIT), train-fold pairs only
 uv run er fit2 configs/blocking/b_v9.toml --name v7 --train-scope full --drop-groups legal   # see memory note below
-uv run er ce-train configs/blocking/b_v9.toml --name ce_usin_base --init intfloat/multilingual-e5-base --lr 2e-5
-uv run er ce-band --name v7 --ce-model ce_usin_base   # combiner on OOF (CE-seen S1 excluded) + policy, stored in the bundle
 uv run er submit2 --name v7                           # test scoring; competitor context over all test S1 (1 partition)
+uv run er ce-train-mix --name v7 --parts 1 --out ce_usin_base4f   # e5-base: 4.2M labeled non-OOF pairs + unlabeled-country pseudo-labels (~2.5 h)
+uv run er ce-band --name v7 --ce-model ce_usin_base4f --lo 0.02 --hi 0.995 --combiner xgb --raw --raw-addr   # OOF combiner (CE-seen S1 excluded) + policy
 uv run er decide-test --name v7 --parts 1             # band rescore -> EXR -> tilted expected-F0.5 -> output/*.tsv
 python student_resource/utils/validate_submission.py -m output/matching_results.tsv -c output/candidate_pairs.tsv -t student_resource/dataset/test --check-ids
 ```

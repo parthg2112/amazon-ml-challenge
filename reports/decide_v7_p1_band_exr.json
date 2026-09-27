@@ -3,25 +3,26 @@
   "parts": 1,
   "band": true,
   "sc": true,
+  "raw": true,
   "exr": true,
   "kpm": false,
   "by_country": false,
   "policy": {
     "decision_winner": "prior_tilted_exact_f05",
     "exclusivity_winner": "max_probability",
-    "threshold": 0.63
+    "threshold": 0.62
   },
   "sum_p_per_s1_by_country": {
-    "US": 3.4296239967667312,
-    "France": 3.2837851510105915,
-    "India": 3.4221745807952235
+    "France": 3.2488492572807304,
+    "India": 3.417296718708718,
+    "US": 3.4250843756503486
   },
-  "predicted_pairs": 5777554,
-  "s1_with_matches": 1632821,
-  "links_per_s1": 3.3347228122344945,
+  "predicted_pairs": 5797846,
+  "s1_with_matches": 1632210,
+  "links_per_s1": 3.3464350688929114,
   "links_per_s1_by_country": {
-    "India": 3.3607852481400915,
-    "US": 3.36932405980341,
-    "France": 3.1649245332469977
+    "US": 3.3779350511079675,
+    "India": 3.373107683342675,
+    "France": 3.182658063919338
   }
 }

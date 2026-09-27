@@ -32,6 +32,8 @@ VAL_PROXY = io.ARTIFACTS / "match" / "ce_val_us.parquet"  # all 8.8M val pairs, 
 
 
 SC_COLS = ["sc_eq", "sc_nosib", "sc_lsib"]
+RAW_COLS = ["raw_eq", "raw_nt", "raw_n1"]
+ADDR_COLS = ["rawa_eq", "rawa_nt"]  # legal-form agreement was tried too: +0.00006 val, -0.0007 India rehearsal
 SIB_P = 0.9
 KPM_TOL = 0.03  # Σp drift that triggers matching; test US -1.0%, India -1.4%, France -6.0%
 
@@ -65,6 +67,44 @@ def sibling_features(scored: pl.DataFrame, pairs: pl.DataFrame, split: str, conf
                     pl.col("n_sib").log1p().cast(pl.Float32).alias("sc_lsib"))
 
 
+def _fold(col: str) -> pl.Expr:
+    return (pl.col(col).fill_null("").str.to_lowercase().str.split(" ")
+            .list.eval(pl.element().filter(pl.element() != "")).list.join(" "))
+
+
+def raw_features(pairs: pl.DataFrame, split: str) -> pl.DataFrame:
+    """Raw name / address agreement (case/whitespace-folded, legal form kept) and how many S1 of the country carry
+    each raw value. Copies keep the owner's raw form more often than a same-key twin's: unique raw-equal claimant =
+    owner 98% (val)."""
+    s1 = io.load_source(split, "S1").select(pl.col("entity_id").alias("s1_id"), "country",
+                                            _fold("business_name").alias("k1"), _fold("business_address").alias("a1"))
+    tg = pl.concat([io.load_source(split, s) for s in io.SOURCES if s != "S1"]).select(
+        pl.col("entity_id").alias("target_id"), _fold("business_name").alias("kt"), _fold("business_address").alias("at"))
+    cnt = s1.group_by("country", "k1").len().rename({"len": "n"})
+    acnt = s1.group_by("country", "a1").len().rename({"a1": "at", "len": "na_t"})
+    return (pairs.select("s1_id", "target_id").join(s1, on="s1_id").join(tg, on="target_id")
+            .join(cnt.rename({"k1": "kt", "n": "n_t"}), on=["country", "kt"], how="left")
+            .join(cnt.rename({"n": "n_1"}), on=["country", "k1"], how="left")
+            .join(acnt, on=["country", "at"], how="left")
+            .select("s1_id", "target_id", (pl.col("k1") == pl.col("kt")).cast(pl.Float32).alias("raw_eq"),
+                    pl.col("n_t").fill_null(0).log1p().cast(pl.Float32).alias("raw_nt"),
+                    pl.col("n_1").fill_null(0).log1p().cast(pl.Float32).alias("raw_n1"),
+                    ((pl.col("a1") == pl.col("at")) & (pl.col("a1") != "")).cast(pl.Float32).alias("rawa_eq"),
+                    pl.col("na_t").fill_null(0).log1p().cast(pl.Float32).alias("rawa_nt")))
+
+
+def _extras(scored: pl.DataFrame, pairs: pl.DataFrame, split: str, config: str, sc: bool, raw: bool,
+            raw_addr: bool = False) -> tuple[pl.DataFrame | None, list[str]]:
+    """Combiner inputs beyond [logit p, tanh(ce/2)]: SC and/or raw name (and address) columns for `pairs`."""
+    out, cols = pairs.select("s1_id", "target_id"), []
+    if sc:
+        out, cols = out.join(sibling_features(scored, pairs, split, config), on=["s1_id", "target_id"], how="left"), SC_COLS
+    if raw or raw_addr:
+        out = out.join(raw_features(pairs, split), on=["s1_id", "target_id"], how="left")
+        cols = cols + (RAW_COLS if raw else []) + (ADDR_COLS if raw_addr else [])
+    return (out if cols else None), cols
+
+
 def _band(df: pl.DataFrame, band: tuple[float, float]) -> pl.DataFrame:
     return df.filter((pl.col("p") > band[0]) & (pl.col("p") < band[1]))
 
@@ -96,7 +136,7 @@ def ce_scores(pairs: pl.DataFrame, split: str, tag: str, ce_model: str = CE_MODE
 
 
 def apply(scored: pl.DataFrame, ce: pl.DataFrame, model: LogisticRegression,
-          band: tuple[float, float] = BAND, sc: pl.DataFrame | None = None) -> pl.DataFrame:
+          band: tuple[float, float] = BAND, sc: pl.DataFrame | None = None, cols: list[str] = SC_COLS) -> pl.DataFrame:
     """Replace in-band p with the combiner's probability; out-of-band rows keep p exactly."""
     b = _band(scored, band).join(ce, on=["s1_id", "target_id"], how="left")
     if b["ce"].null_count():
@@ -104,15 +144,24 @@ def apply(scored: pl.DataFrame, ce: pl.DataFrame, model: LogisticRegression,
     scm = None
     if sc is not None:
         b = b.join(sc, on=["s1_id", "target_id"], how="left")
-        scm = b.select(SC_COLS).fill_null(0).to_numpy()
+        scm = b.select(cols).fill_null(0).to_numpy()
     new = b.select("s1_id", "target_id", pl.Series("_p2", model.predict_proba(
         _x(b["p"].to_numpy(), b["ce"].to_numpy(), scm))[:, 1]))
     return (scored.join(new, on=["s1_id", "target_id"], how="left")
             .with_columns(pl.coalesce("_p2", "p").cast(pl.Float32).alias("p")).drop("_p2"))
 
 
+def _combiner(kind: str):
+    """xgb on (0.02, 0.995) beat the band logistic by +0.0011 val and +0.0008 on the India proxy."""
+    if kind == "xgb":
+        from xgboost import XGBClassifier
+        return XGBClassifier(n_estimators=300, max_depth=5, learning_rate=0.08, tree_method="hist", n_jobs=io.THREADS)
+    return LogisticRegression(C=1e3, max_iter=1000)
+
+
 def fit_band(name: str, band: tuple[float, float] = BAND, exr: bool = True, use_sc: bool = True,
-             ce_model: str = CE_MODEL) -> dict:
+             ce_model: str = CE_MODEL, combiner: str = "logistic", use_raw: bool = False,
+             raw_addr: bool = False) -> dict:
     """Cross-fit the combiner on the bundle's OOF (by cv_fold), re-select the policy on the rescored OOF,
     and store the final combiner (fit on all band pairs) + policy in the bundle under `ce_band`."""
     truth = io.load_truth()
@@ -127,16 +176,17 @@ def fit_band(name: str, band: tuple[float, float] = BAND, exr: bool = True, use_
     ce_seen = subset_ids(load_split(), cfg["ranker"].get("train_subset", "rtrain"))
     oof = oof.filter(~pl.col("s1_id").is_in(ce_seen.implode()))
     b = _band(oof, band).join(ce_scores(_band(oof, band), "train", f"{name}_oof", ce_model), on=["s1_id", "target_id"])
+    ext, cols = _extras(oof, b, "train", bundle["config"], use_sc, use_raw, raw_addr)
     scm = None
-    if use_sc:
-        b = b.join(sibling_features(oof, b, "train", bundle["config"]), on=["s1_id", "target_id"], how="left")
-        scm = b.select(SC_COLS).fill_null(0).to_numpy()
+    if ext is not None:
+        b = b.join(ext, on=["s1_id", "target_id"], how="left")
+        scm = b.select(cols).fill_null(0).to_numpy()
     X, y, folds = _x(b["p"].to_numpy(), b["ce"].to_numpy(), scm), b["y"].to_numpy(), b["cv_fold"].to_numpy()
     p_cf = np.empty(len(y))
     for f in np.unique(folds):
         m = folds == f
-        p_cf[m] = LogisticRegression(C=1e3, max_iter=1000).fit(X[~m], y[~m]).predict_proba(X[m])[:, 1]
-    final = LogisticRegression(C=1e3, max_iter=1000).fit(X, y)
+        p_cf[m] = _combiner(combiner).fit(X[~m], y[~m]).predict_proba(X[m])[:, 1]
+    final = _combiner(combiner).fit(X, y)
     rescored = (oof.join(b.select("s1_id", "target_id", pl.Series("_p2", p_cf)), on=["s1_id", "target_id"], how="left")
                 .with_columns(pl.coalesce("_p2", "p").cast(pl.Float32).alias("p")).drop("_p2", "y"))
     if exr:
@@ -149,12 +199,15 @@ def fit_band(name: str, band: tuple[float, float] = BAND, exr: bool = True, use_
         sub = rescored.filter(pl.col("q_country") == c)
         by_country[c] = macro_f05(truth.filter(pl.col("s1_id").is_in(sub["s1_id"].unique().implode())),
                                   _policy_predict(sub, policy))
-    bundle["ce_band"] = {"model": final, "band": band, "exr": exr, "sc": use_sc, "ce_model": ce_model,
-                         "policy": policy}
+    bundle["ce_band"] = {"model": final, "band": band, "exr": exr, "sc": use_sc, "raw": use_raw, "raw_addr": raw_addr,
+                         "ce_model": ce_model, "combiner": combiner, "policy": policy}
     bundle_path.write_bytes(pickle.dumps(bundle))
     rescored.write_parquet(io.ARTIFACTS / "match" / f"oof_{name}_band.parquet")
-    result = {"name": name, "band": band, "exr": exr, "sc": use_sc, "ce_model": ce_model, "band_pairs": b.height,
-              "coef": final.coef_.ravel().tolist() + final.intercept_.tolist(), "policy": policy,
+    result = {"name": name, "band": band, "exr": exr, "sc": use_sc, "raw": use_raw, "raw_addr": raw_addr,
+              "ce_model": ce_model, "combiner": combiner,
+              "band_pairs": b.height,
+              "coef": final.coef_.ravel().tolist() + final.intercept_.tolist() if combiner == "logistic" else None,
+              "policy": policy,
               "final_macro_f05": decision["final"]["macro_f05"], "by_country": by_country,
               "stages": {k: v.get("macro_f05") for k, v in decision["stages"].items()}}
     (io.REPORTS / "match" / f"{name}_band.json").write_text(json.dumps(result, indent=2, default=str))
@@ -174,9 +227,10 @@ def decide_test(name: str, parts: int, use_band: bool = True, exr: bool | None =
     if use_band:
         cb = bundle["ce_band"]
         bp = _band(scored, cb["band"])
-        sc = sibling_features(scored, bp, "test", bundle["config"]) if cb.get("sc") else None
+        sc, cols = _extras(scored, bp, "test", bundle["config"], bool(cb.get("sc")), bool(cb.get("raw")),
+                           bool(cb.get("raw_addr")))
         ce = ce_scores(bp, "test", f"{name}_p{parts}_test", cb.get("ce_model", CE_MODEL))
-        scored = apply(scored, ce, cb["model"], cb["band"], sc)
+        scored = apply(scored, ce, cb["model"], cb["band"], sc, cols)
         policy = cb["policy"]
         exr = cb["exr"] if exr is None else exr
     if exr:
@@ -213,7 +267,7 @@ def decide_test(name: str, parts: int, use_band: bool = True, exr: bool | None =
            .join(cty.group_by("country").len().rename({"len": "n"}), on="country")
            .with_columns((pl.col("len") / pl.col("n")).alias("links_per_s1")))
     stats = {"name": name, "parts": parts, "band": use_band, "sc": bool(use_band and bundle["ce_band"].get("sc")),
-             "exr": bool(exr), "kpm": kpm, "by_country": by_country, "policy": policy,
+             "raw": bool(use_band and bundle["ce_band"].get("raw")), "exr": bool(exr), "kpm": kpm, "by_country": by_country, "policy": policy,
              "sum_p_per_s1_by_country": dict(zip(sum_p["country"].to_list(), sum_p["sp"].to_list())),
              "predicted_pairs": preds.height, "s1_with_matches": int((full["matched_entity_ids"] != "").sum()),
              "links_per_s1": preds.height / test_ids.len(),

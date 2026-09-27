@@ -186,11 +186,24 @@ def cmd_ce_train(args: argparse.Namespace) -> None:
                      indent=2, default=str))
 
 
+def cmd_ce_adapt(args: argparse.Namespace) -> None:
+    from er.match import cross
+
+    print(json.dumps(cross.adapt(args.name, args.parts, args.base, args.out, args.n_s1), indent=2, default=str))
+
+
+def cmd_ce_train_mix(args: argparse.Namespace) -> None:
+    from er.match import cross
+
+    print(json.dumps(cross.train_mix(args.name, args.parts, args.out, args.n_labeled, args.init, args.lr),
+                     indent=2, default=str))
+
+
 def cmd_ce_band(args: argparse.Namespace) -> None:
     from er.match import ce_band
 
-    print(json.dumps(ce_band.fit_band(args.name, (args.lo, args.hi), not args.no_exr, not args.no_sc, args.ce_model),
-                     indent=2, default=str))
+    print(json.dumps(ce_band.fit_band(args.name, (args.lo, args.hi), not args.no_exr, not args.no_sc, args.ce_model,
+                                      args.combiner, args.raw, args.raw_addr), indent=2, default=str))
 
 
 def cmd_decide_test(args: argparse.Namespace) -> None:
@@ -376,6 +389,23 @@ def main() -> None:
     sp.add_argument("--lr", type=float, default=3e-5)
     sp.set_defaults(fn=cmd_ce_train)
 
+    sp = sub.add_parser("ce-adapt", help="fine-tune a CE on pseudo-labels of test countries without training labels")
+    sp.add_argument("--name", default="v7", help="scorer bundle whose test scores give the pseudo-labels")
+    sp.add_argument("--parts", type=int, default=1)
+    sp.add_argument("--base", default="ce_usin_base", help="CE dir under artifacts/models to start from")
+    sp.add_argument("--out", default="ce_usin_base_fr", help="output dir under artifacts/models")
+    sp.add_argument("--n-s1", type=int, default=80_000, help="pseudo-labeled S1 to sample")
+    sp.set_defaults(fn=cmd_ce_adapt)
+
+    sp = sub.add_parser("ce-train-mix", help="train a CE on labeled full-scope pairs + unlabeled-country pseudo-labels")
+    sp.add_argument("--name", default="v7", help="scorer bundle: OOF S1 to exclude, test scores for pseudo-labels")
+    sp.add_argument("--parts", type=int, default=1)
+    sp.add_argument("--out", default="ce_usin_base4f", help="output dir under artifacts/models")
+    sp.add_argument("--n-labeled", type=int, default=4_200_000)
+    sp.add_argument("--init", default="intfloat/multilingual-e5-base")
+    sp.add_argument("--lr", type=float, default=2e-5)
+    sp.set_defaults(fn=cmd_ce_train_mix)
+
     sp = sub.add_parser("ce-band", help="fit the uncertain-band CE combiner on OOF; re-select and store the policy")
     sp.add_argument("--name", default="v6")
     sp.add_argument("--lo", type=float, default=0.2)
@@ -383,6 +413,9 @@ def main() -> None:
     sp.add_argument("--no-exr", action="store_true", help="skip exclusivity renormalization")
     sp.add_argument("--no-sc", action="store_true", help="skip sibling house-consensus features")
     sp.add_argument("--ce-model", default="ce_us", help="cross-encoder dir under artifacts/models")
+    sp.add_argument("--combiner", default="logistic", choices=["logistic", "xgb"])
+    sp.add_argument("--raw", action="store_true", help="add raw-name agreement / support features")
+    sp.add_argument("--raw-addr", action="store_true", help="add raw-address agreement / support features")
     sp.set_defaults(fn=cmd_ce_band)
 
     sp = sub.add_parser("decide-test", help="re-decide cached test scores (band, EXR, policy); write both TSVs")
