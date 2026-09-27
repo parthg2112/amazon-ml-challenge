@@ -34,6 +34,7 @@ VAL_PROXY = io.ARTIFACTS / "match" / "ce_val_us.parquet"  # all 8.8M val pairs, 
 SC_COLS = ["sc_eq", "sc_nosib", "sc_lsib"]
 RAW_COLS = ["raw_eq", "raw_nt", "raw_n1"]
 ADDR_COLS = ["rawa_eq", "rawa_nt"]  # legal-form agreement was tried too: +0.00006 val, -0.0007 India rehearsal
+CONTEST_COLS = ["contest_street_margin", "contest_best_street", "contest_same_name_rivals"]
 SIB_P = 0.9
 KPM_TOL = 0.03  # Σp drift that triggers matching; test US -1.0%, India -1.4%, France -6.0%
 
@@ -93,8 +94,57 @@ def raw_features(pairs: pl.DataFrame, split: str) -> pl.DataFrame:
                     pl.col("na_t").fill_null(0).log1p().cast(pl.Float32).alias("rawa_nt")))
 
 
+def _contest_from_claims(claims: pl.DataFrame) -> pl.DataFrame:
+    """Contest-relative signals from all S1 claimants for each target.
+
+    `claims` has one row per scored (S1, target) pair and carries the normalized street
+    words and name key.  We intentionally compare street *words*, not street types: French
+    siblings often all have a ``rue`` but only one has the target's actual street name.
+    """
+    from rapidfuzz import fuzz
+
+    q = claims["q_addr_street"].fill_null("").to_list()
+    t = claims["t_addr_street"].fill_null("").to_list()
+    sim = np.asarray([fuzz.token_set_ratio(a, b) / 100 for a, b in zip(q, t)], dtype=np.float32)
+    df = claims.with_columns(pl.Series("_street_sim", sim))
+    top2 = (df.sort(["target_id", "_street_sim", "s1_id"], descending=[False, True, False])
+              .group_by("target_id", maintain_order=True).head(2)
+              .group_by("target_id")
+              .agg(pl.col("s1_id").first().alias("_best_s1"),
+                   pl.col("_street_sim").first().alias("_best"),
+                   pl.col("_street_sim").get(1, null_on_oob=True).alias("_second"),
+                   (pl.col("_street_sim") == pl.col("_street_sim").max()).sum().alias("_n_best")))
+    df = df.join(top2, on="target_id", how="left")
+    rival_best = pl.when(pl.col("s1_id") == pl.col("_best_s1")).then(
+        pl.col("_second").fill_null(pl.col("_street_sim"))).otherwise(pl.col("_best"))
+    # Count *other* claimants with this S1's cleaned name, even if they normalize to
+    # another raw spelling.  log1p keeps large sibling families bounded for the combiner.
+    same_name = pl.len().over("target_id", "q_name_min_key") - 1
+    return df.select("s1_id", "target_id",
+                     (pl.col("_street_sim") - rival_best).cast(pl.Float32).alias("contest_street_margin"),
+                     ((pl.col("s1_id") == pl.col("_best_s1")) & (pl.col("_n_best") == 1)).cast(pl.Float32)
+                     .alias("contest_best_street"),
+                     same_name.log1p().cast(pl.Float32).alias("contest_same_name_rivals"))
+
+
+def contest_features(scored: pl.DataFrame, pairs: pl.DataFrame, split: str, config: str) -> pl.DataFrame:
+    """Return contest signals for `pairs`, using the complete score universe as rivals."""
+    from er.normalize.pipeline import NormConfig, load_norm
+
+    cfg = tomllib.loads(Path(config).read_text(encoding="utf-8"))
+    nc = NormConfig(**cfg.get("norm", {}))
+    q = load_norm(split, "S1", nc).select(pl.col("entity_id").alias("s1_id"), "addr_street", "name_min_key")
+    t = pl.concat([load_norm(split, s, nc) for s in io.TARGET_SOURCES]).select(
+        pl.col("entity_id").alias("target_id"), "addr_street")
+    claims = (scored.select("s1_id", "target_id").unique().join(q, on="s1_id", how="left")
+              .join(t, on="target_id", how="left")
+              .rename({"addr_street": "q_addr_street", "name_min_key": "q_name_min_key",
+                       "addr_street_right": "t_addr_street"}))
+    return pairs.select("s1_id", "target_id").join(_contest_from_claims(claims), on=["s1_id", "target_id"], how="left")
+
+
 def _extras(scored: pl.DataFrame, pairs: pl.DataFrame, split: str, config: str, sc: bool, raw: bool,
-            raw_addr: bool = False) -> tuple[pl.DataFrame | None, list[str]]:
+            raw_addr: bool = False, contest: bool = True) -> tuple[pl.DataFrame | None, list[str]]:
     """Combiner inputs beyond [logit p, tanh(ce/2)]: SC and/or raw name (and address) columns for `pairs`."""
     out, cols = pairs.select("s1_id", "target_id"), []
     if sc:
@@ -102,6 +152,9 @@ def _extras(scored: pl.DataFrame, pairs: pl.DataFrame, split: str, config: str, 
     if raw or raw_addr:
         out = out.join(raw_features(pairs, split), on=["s1_id", "target_id"], how="left")
         cols = cols + (RAW_COLS if raw else []) + (ADDR_COLS if raw_addr else [])
+    if contest:
+        out = out.join(contest_features(scored, pairs, split, config), on=["s1_id", "target_id"], how="left")
+        cols = cols + CONTEST_COLS
     return (out if cols else None), cols
 
 
@@ -161,7 +214,7 @@ def _combiner(kind: str):
 
 def fit_band(name: str, band: tuple[float, float] = BAND, exr: bool = True, use_sc: bool = True,
              ce_model: str = CE_MODEL, combiner: str = "logistic", use_raw: bool = False,
-             raw_addr: bool = False) -> dict:
+             raw_addr: bool = False, use_contest: bool = True) -> dict:
     """Cross-fit the combiner on the bundle's OOF (by cv_fold), re-select the policy on the rescored OOF,
     and store the final combiner (fit on all band pairs) + policy in the bundle under `ce_band`."""
     truth = io.load_truth()
@@ -176,7 +229,7 @@ def fit_band(name: str, band: tuple[float, float] = BAND, exr: bool = True, use_
     ce_seen = subset_ids(load_split(), cfg["ranker"].get("train_subset", "rtrain"))
     oof = oof.filter(~pl.col("s1_id").is_in(ce_seen.implode()))
     b = _band(oof, band).join(ce_scores(_band(oof, band), "train", f"{name}_oof", ce_model), on=["s1_id", "target_id"])
-    ext, cols = _extras(oof, b, "train", bundle["config"], use_sc, use_raw, raw_addr)
+    ext, cols = _extras(oof, b, "train", bundle["config"], use_sc, use_raw, raw_addr, use_contest)
     scm = None
     if ext is not None:
         b = b.join(ext, on=["s1_id", "target_id"], how="left")
@@ -199,11 +252,11 @@ def fit_band(name: str, band: tuple[float, float] = BAND, exr: bool = True, use_
         sub = rescored.filter(pl.col("q_country") == c)
         by_country[c] = macro_f05(truth.filter(pl.col("s1_id").is_in(sub["s1_id"].unique().implode())),
                                   _policy_predict(sub, policy))
-    bundle["ce_band"] = {"model": final, "band": band, "exr": exr, "sc": use_sc, "raw": use_raw, "raw_addr": raw_addr,
+    bundle["ce_band"] = {"model": final, "band": band, "exr": exr, "sc": use_sc, "raw": use_raw, "raw_addr": raw_addr, "contest": use_contest,
                          "ce_model": ce_model, "combiner": combiner, "policy": policy}
     bundle_path.write_bytes(pickle.dumps(bundle))
     rescored.write_parquet(io.ARTIFACTS / "match" / f"oof_{name}_band.parquet")
-    result = {"name": name, "band": band, "exr": exr, "sc": use_sc, "raw": use_raw, "raw_addr": raw_addr,
+    result = {"name": name, "band": band, "exr": exr, "sc": use_sc, "raw": use_raw, "raw_addr": raw_addr, "contest": use_contest,
               "ce_model": ce_model, "combiner": combiner,
               "band_pairs": b.height,
               "coef": final.coef_.ravel().tolist() + final.intercept_.tolist() if combiner == "logistic" else None,
@@ -228,7 +281,7 @@ def decide_test(name: str, parts: int, use_band: bool = True, exr: bool | None =
         cb = bundle["ce_band"]
         bp = _band(scored, cb["band"])
         sc, cols = _extras(scored, bp, "test", bundle["config"], bool(cb.get("sc")), bool(cb.get("raw")),
-                           bool(cb.get("raw_addr")))
+                           bool(cb.get("raw_addr")), bool(cb.get("contest", False)))
         ce = ce_scores(bp, "test", f"{name}_p{parts}_test", cb.get("ce_model", CE_MODEL))
         scored = apply(scored, ce, cb["model"], cb["band"], sc, cols)
         policy = cb["policy"]
@@ -267,7 +320,7 @@ def decide_test(name: str, parts: int, use_band: bool = True, exr: bool | None =
            .join(cty.group_by("country").len().rename({"len": "n"}), on="country")
            .with_columns((pl.col("len") / pl.col("n")).alias("links_per_s1")))
     stats = {"name": name, "parts": parts, "band": use_band, "sc": bool(use_band and bundle["ce_band"].get("sc")),
-             "raw": bool(use_band and bundle["ce_band"].get("raw")), "exr": bool(exr), "kpm": kpm, "by_country": by_country, "policy": policy,
+             "raw": bool(use_band and bundle["ce_band"].get("raw")), "contest": bool(use_band and bundle["ce_band"].get("contest")), "exr": bool(exr), "kpm": kpm, "by_country": by_country, "policy": policy,
              "sum_p_per_s1_by_country": dict(zip(sum_p["country"].to_list(), sum_p["sp"].to_list())),
              "predicted_pairs": preds.height, "s1_with_matches": int((full["matched_entity_ids"] != "").sum()),
              "links_per_s1": preds.height / test_ids.len(),

@@ -25,3 +25,24 @@ def test_apply_raises_when_band_pair_lacks_ce():
     except ValueError:
         return
     raise AssertionError("expected ValueError")
+
+
+def test_contest_features_prefer_unique_street_word_winner():
+    # A tiny France-like contest: names and house number can collide, but only `louis barthou`
+    # is the target's street.  The runner-up remains visible as a sibling instead of being forced
+    # to own the target, preserving the downstream "none" option.
+    claims = pl.DataFrame({
+        "s1_id": ["S1-owner", "S1-sibling", "S1-other"],
+        "target_id": ["S3-target"] * 3,
+        "q_addr_street": ["louis barthou", "saint joseph", "leveux"],
+        "t_addr_street": ["louis barthou"] * 3,
+        "q_name_min_key": ["pole", "pole", "another"],
+    })
+    out = ce_band._contest_from_claims(claims).sort("s1_id")
+    rows = {r["s1_id"]: r for r in out.to_dicts()}
+    assert rows["S1-owner"]["contest_street_margin"] > 0.9
+    assert rows["S1-owner"]["contest_best_street"] == 1.0
+    assert rows["S1-sibling"]["contest_street_margin"] < 0
+    assert rows["S1-sibling"]["contest_best_street"] == 0.0
+    assert rows["S1-owner"]["contest_same_name_rivals"] > 0
+    assert rows["S1-other"]["contest_same_name_rivals"] == 0

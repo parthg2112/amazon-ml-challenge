@@ -29,7 +29,9 @@ class NormConfig:
 
     @property
     def variant(self) -> str:
-        v = f"t{int(self.translit)}-{self.profile_mode}"
+        # Bump when the normalized-record schema changes so an older parquet cache cannot
+        # silently omit a newly added field.
+        v = f"v2-t{int(self.translit)}-{self.profile_mode}"
         if self.learned:
             v += "-" + Path(self.learned).stem
         return v
@@ -72,7 +74,7 @@ SCHEMA = {
     "profile": pl.Utf8, "name_native": pl.Boolean, "name_full": pl.Utf8, "name_core": pl.Utf8,
     "name_legal": pl.Utf8, "name_sorted": pl.Utf8, "name_concat": pl.Utf8, "name_fold": pl.Utf8,
     "name_alts": pl.List(pl.Utf8), "name_domain": pl.Boolean, "addr_norm": pl.Utf8,
-    "addr_content": pl.Utf8, "addr_region": pl.Utf8, "addr_house": pl.Utf8,
+    "addr_content": pl.Utf8, "addr_street": pl.Utf8, "addr_region": pl.Utf8, "addr_house": pl.Utf8,
     "addr_numbers": pl.List(pl.Utf8), "addr_postal": pl.Utf8, "addr_city": pl.Utf8,
     "addr_unit": pl.Utf8, "addr_landmark": pl.Utf8, "addr_empty": pl.Boolean,
     "name_min": pl.Utf8, "name_min_key": pl.Utf8,

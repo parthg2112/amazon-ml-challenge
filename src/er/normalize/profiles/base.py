@@ -29,6 +29,9 @@ class Profile:
     postal_before_city: bool = False  # "59000 LILLE"
     apostrophe_splits: bool = False  # French elision: l'avenue → l avenue
     extra_stopwords: frozenset[str] = field(default_factory=frozenset)
+    # Canonicalized address tokens which look like street markers but are meaningful street words.
+    # They are retained in addr_content / addr_street rather than being stripped with "rue", "av", etc.
+    street_content_keep: frozenset[str] = field(default_factory=frozenset)
 
 
 def merged(base: dict[str, str], extra: dict[str, str]) -> dict[str, str]:

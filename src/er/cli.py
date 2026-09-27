@@ -211,7 +211,7 @@ def cmd_ce_band(args: argparse.Namespace) -> None:
     from er.match import ce_band
 
     print(json.dumps(ce_band.fit_band(args.name, (args.lo, args.hi), not args.no_exr, not args.no_sc, args.ce_model,
-                                      args.combiner, args.raw, args.raw_addr), indent=2, default=str))
+                                      args.combiner, args.raw, args.raw_addr, not args.no_contest), indent=2, default=str))
 
 
 def cmd_decide_test(args: argparse.Namespace) -> None:
@@ -440,6 +440,7 @@ def main() -> None:
     sp.add_argument("--combiner", default="logistic", choices=["logistic", "xgb"])
     sp.add_argument("--raw", action="store_true", help="add raw-name agreement / support features")
     sp.add_argument("--raw-addr", action="store_true", help="add raw-address agreement / support features")
+    sp.add_argument("--no-contest", action="store_true", help="skip contest-relative street/name features")
     sp.set_defaults(fn=cmd_ce_band)
 
     sp = sub.add_parser("decide-test", help="re-decide cached test scores (band, EXR, policy); write both TSVs")
